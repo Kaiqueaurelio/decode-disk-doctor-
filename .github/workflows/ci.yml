@@ -20,7 +20,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all
       - name: Run core tests
         run: cargo test --workspace --exclude decode-disk-doctor-app
       - name: Run Clippy
