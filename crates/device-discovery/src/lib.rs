@@ -1,16 +1,18 @@
-//! Read-only Linux block-device discovery using sysfs.
-//! This module does not open devices for writing or issue disk commands.
+//! Read-only block-device discovery for Linux and Windows.
+//! Discovery reads system inventory metadata and never opens disks for writing.
 
 use decode_core::DeviceIdentity;
-use std::{fs, io, path::Path};
+use std::{io, path::Path};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DiscoveryError {
-    #[error("Device discovery is currently supported only on Linux.")]
+    #[error("Device discovery is currently supported only on Linux and Windows.")]
     UnsupportedPlatform,
-    #[error("Could not read sysfs: {0}")]
+    #[error("Could not read system device inventory: {0}")]
     Io(#[from] io::Error),
+    #[error("Could not parse system device inventory: {0}")]
+    InvalidOutput(String),
 }
 
 pub fn discover_devices() -> Result<Vec<DeviceIdentity>, DiscoveryError> {
@@ -18,7 +20,11 @@ pub fn discover_devices() -> Result<Vec<DeviceIdentity>, DiscoveryError> {
     {
         discover_linux(Path::new("/sys/block"))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    {
+        discover_windows()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         Err(DiscoveryError::UnsupportedPlatform)
     }
@@ -26,6 +32,8 @@ pub fn discover_devices() -> Result<Vec<DeviceIdentity>, DiscoveryError> {
 
 #[cfg(target_os = "linux")]
 fn discover_linux(root: &Path) -> Result<Vec<DeviceIdentity>, DiscoveryError> {
+    use std::fs;
+
     let mut devices = Vec::new();
     for entry in fs::read_dir(root)? {
         let entry = entry?;
@@ -75,7 +83,71 @@ fn discover_linux(root: &Path) -> Result<Vec<DeviceIdentity>, DiscoveryError> {
 
 #[cfg(target_os = "linux")]
 fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    std::fs::read_to_string(path).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+#[cfg(target_os = "windows")]
+fn discover_windows() -> Result<Vec<DeviceIdentity>, DiscoveryError> {
+    use std::process::Command;
+
+    // Fixed PowerShell query; no user-provided value is interpolated into this script.
+    let script = "$ErrorActionPreference='Stop'; Get-CimInstance -ClassName Win32_DiskDrive | Select-Object DeviceID,Model,SerialNumber,Size,PNPDeviceID | ConvertTo-Json -Compress";
+    let output = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .output()?;
+
+    if !output.status.success() {
+        return Err(DiscoveryError::InvalidOutput(
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
+    }
+
+    parse_windows_inventory(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn parse_windows_inventory(raw: &str) -> Result<Vec<DeviceIdentity>, DiscoveryError> {
+    use serde_json::Value;
+
+    let value: Value = serde_json::from_str(raw)
+        .map_err(|error| DiscoveryError::InvalidOutput(error.to_string()))?;
+    let rows: Vec<&Value> = match &value {
+        Value::Array(items) => items.iter().collect(),
+        Value::Object(_) => vec![&value],
+        Value::Null => Vec::new(),
+        _ => return Err(DiscoveryError::InvalidOutput("Unexpected PowerShell JSON shape.".into())),
+    };
+
+    let mut devices = Vec::new();
+    for row in rows {
+        let device_path = row.get("DeviceID").and_then(Value::as_str).unwrap_or_default().trim();
+        if !device_path.to_ascii_lowercase().starts_with(r"\\.\physicaldrive") {
+            continue;
+        }
+
+        let capacity_bytes = row.get("Size")
+            .and_then(|size| size.as_u64().or_else(|| size.as_str().and_then(|s| s.parse::<u64>().ok())))
+            .unwrap_or(0);
+        if capacity_bytes == 0 {
+            continue;
+        }
+
+        let model = row.get("Model").and_then(Value::as_str).unwrap_or("Unknown disk").trim().to_string();
+        let serial = row.get("SerialNumber").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+        let pnp = row.get("PNPDeviceID").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+        let stable_id = pnp.map(|id| format!("pnp:{id}"))
+            .or_else(|| serial.as_ref().map(|id| format!("serial:{id}")));
+
+        devices.push(DeviceIdentity {
+            device_path: device_path.to_string(),
+            stable_id,
+            serial,
+            model,
+            capacity_bytes,
+        });
+    }
+
+    devices.sort_by(|a, b| a.device_path.cmp(&b.device_path));
+    Ok(devices)
 }
 
 #[cfg(test)]
@@ -85,6 +157,8 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn skips_virtual_devices_and_reads_capacity() {
+        use std::fs;
+
         let root = std::env::temp_dir().join(format!("decode-sysfs-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("sda/device")).unwrap();
@@ -101,5 +175,14 @@ mod tests {
         assert_eq!(result[0].serial.as_deref(), Some("FIXTURE-01"));
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn parses_windows_disk_inventory_without_device_access() {
+        let raw = r#"[{"DeviceID":"\\.\PHYSICALDRIVE0","Model":"Example SSD","SerialNumber":"SER-01","Size":"1000000000","PNPDeviceID":"SCSI\\DISK&VEN_EXAMPLE"}]"#;
+        let result = parse_windows_inventory(raw).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].capacity_bytes, 1_000_000_000);
+        assert_eq!(result[0].serial.as_deref(), Some("SER-01"));
     }
 }
