@@ -98,6 +98,32 @@ impl DdrescuePlan {
     }
 }
 
+
+#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
+pub struct DdrescueReport{pub exit_code:Option<i32>,pub image_path:String,pub mapfile_path:String}
+#[derive(Debug,Error)]pub enum DdrescueExecutionError{
+#[error("Source is not a Linux block device.")]InvalidSource,
+#[error("Image and mapfile must be on one separate destination filesystem.")]InvalidDestination,
+#[error("Image and mapfile must both exist for resume or both be new.")]IncompleteResumePair,
+#[error("Could not start ddrescue: {0}")]Start(String),#[error("ddrescue failed with code {0:?}")]Failed(Option<i32>),
+#[error("Linux only.")]Unsupported}
+pub fn run_ddrescue_first_pass(p:&DdrescuePlan)->Result<DdrescueReport,DdrescueExecutionError>{
+let args=p.first_pass_args().map_err(|e|DdrescueExecutionError::Start(e.to_string()))?;
+#[cfg(target_os="linux")]{use std::os::unix::fs::{FileTypeExt,MetadataExt};
+let sm=std::fs::metadata(&p.source.path).map_err(|_|DdrescueExecutionError::InvalidSource)?;
+if !sm.file_type().is_block_device(){return Err(DdrescueExecutionError::InvalidSource)}
+let ip=Path::new(&p.destination_image_path);let mp=Path::new(&p.mapfile_path);
+let idir=ip.parent().filter(|x|!x.as_os_str().is_empty()).unwrap_or(Path::new("."));let mdir=mp.parent().filter(|x|!x.as_os_str().is_empty()).unwrap_or(Path::new("."));
+let im=std::fs::metadata(idir).map_err(|_|DdrescueExecutionError::InvalidDestination)?;let mm=std::fs::metadata(mdir).map_err(|_|DdrescueExecutionError::InvalidDestination)?;
+if !im.is_dir()||!mm.is_dir()||im.dev()!=mm.dev()||im.dev()==sm.rdev(){return Err(DdrescueExecutionError::InvalidDestination)}
+let ie=ip.exists();let me=mp.exists();if ie!=me{return Err(DdrescueExecutionError::IncompleteResumePair)}
+if ie{let m=std::fs::symlink_metadata(ip).map_err(|_|DdrescueExecutionError::InvalidDestination)?;if !m.file_type().is_file()||m.file_type().is_symlink(){return Err(DdrescueExecutionError::InvalidDestination)}}
+else{std::fs::OpenOptions::new().write(true).create_new(true).open(ip).map_err(|e|DdrescueExecutionError::Start(e.to_string()))?;}
+let status=Command::new("ddrescue").args(&args).status().map_err(|e|DdrescueExecutionError::Start(e.to_string()))?;
+if !status.success(){return Err(DdrescueExecutionError::Failed(status.code()))}
+Ok(DdrescueReport{exit_code:status.code(),image_path:p.destination_image_path.clone(),mapfile_path:p.mapfile_path.clone()})}
+#[cfg(not(target_os="linux"))]{let _=(p,args);Err(DdrescueExecutionError::Unsupported)}}
+
 #[cfg(test)]
 mod tests {
     use super::*;

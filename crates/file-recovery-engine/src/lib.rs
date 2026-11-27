@@ -53,6 +53,31 @@ impl FileRecoveryPlan {
     }
 }
 
+
+#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
+pub struct PhotoRecReport{pub exit_code:Option<i32>,pub output_directory:String}
+#[derive(Debug,Error)]pub enum PhotoRecExecutionError{
+#[error("Source must be a block device or regular image file.")]InvalidSource,
+#[error("Output folder must be on the selected separate destination device.")]InvalidDestination,
+#[error("Could not start PhotoRec: {0}")]Start(String),#[error("PhotoRec failed with code {0:?}")]Failed(Option<i32>),
+#[error("Linux only.")]Unsupported}
+pub fn photorec_args(p:&FileRecoveryPlan)->Result<Vec<String>,FileRecoveryError>{p.validate_photorec()?;Ok(vec!["/log".into(),"/d".into(),p.output_directory.clone(),p.source.path.clone()])}
+pub fn recover_with_photorec(p:&FileRecoveryPlan)->Result<PhotoRecReport,PhotoRecExecutionError>{
+#[cfg(target_os="linux")]{use std::os::unix::fs::{FileTypeExt,MetadataExt};
+let sm=std::fs::metadata(&p.source.path).map_err(|_|PhotoRecExecutionError::InvalidSource)?;
+let sd=match p.source.kind{EndpointKind::BlockDevice if sm.file_type().is_block_device()=>sm.rdev(),
+EndpointKind::ImageFile if sm.file_type().is_file()=>{let parent=Path::new(&p.source.path).parent().filter(|x|!x.as_os_str().is_empty()).unwrap_or(Path::new("."));std::fs::metadata(parent).map_err(|_|PhotoRecExecutionError::InvalidSource)?.dev()},
+_=>return Err(PhotoRecExecutionError::InvalidSource)};
+let dm=std::fs::metadata(&p.destination.path).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;
+if !dm.file_type().is_block_device(){return Err(PhotoRecExecutionError::InvalidDestination)}
+let out=std::fs::metadata(&p.output_directory).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;
+if !out.is_dir()||out.dev()!=dm.rdev()||out.dev()==sd{return Err(PhotoRecExecutionError::InvalidDestination)}
+let args=photorec_args(p).map_err(|e|PhotoRecExecutionError::Start(e.to_string()))?;
+let status=Command::new("photorec").args(&args).status().map_err(|e|PhotoRecExecutionError::Start(e.to_string()))?;
+if !status.success(){return Err(PhotoRecExecutionError::Failed(status.code()))}
+Ok(PhotoRecReport{exit_code:status.code(),output_directory:p.output_directory.clone()})}
+#[cfg(not(target_os="linux"))]{let _=p;Err(PhotoRecExecutionError::Unsupported)}}
+
 #[cfg(test)]
 mod tests {
     use super::*;

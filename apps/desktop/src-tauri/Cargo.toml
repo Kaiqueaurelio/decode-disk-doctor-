@@ -21,3 +21,4 @@ recovery-engine = { path = "../../../crates/recovery-engine" }
 clone-engine = { path = "../../../crates/clone-engine" }
 imaging-engine = { path = "../../../crates/imaging-engine" }
 safety-policy = { path = "../../../crates/safety-policy" }
+file-recovery-engine = { path = "../../../crates/file-recovery-engine" }
