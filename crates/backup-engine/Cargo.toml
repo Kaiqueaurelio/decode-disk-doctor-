@@ -1,0 +1,11 @@
+[package]
+name = "backup-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+decode-core = { path = "../decode-core" }
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
