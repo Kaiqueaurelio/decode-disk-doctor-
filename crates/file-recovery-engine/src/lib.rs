@@ -94,7 +94,8 @@ mod tests {
             destination: endpoint("destination", false, false),
             output_directory: "/mnt/recovery/files".into() };
         assert!(plan.validate_photorec().is_ok());
-        assert!(plan.validate_testdisk_analysis(false).is_ok());\n        assert_eq!(photorec_args(&plan).unwrap(), vec!["/log", "/d", "/mnt/recovery/files", "/dev/source"]);
+        assert!(plan.validate_testdisk_analysis(false).is_ok());
+        assert_eq!(photorec_args(&plan).unwrap(), vec!["/log", "/d", "/mnt/recovery/files", "/dev/source"]);
     }
 
     #[test]
