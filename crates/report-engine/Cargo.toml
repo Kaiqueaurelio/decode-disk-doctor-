@@ -1,0 +1,10 @@
+[package]
+name = "report-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+decode-core = { path = "../decode-core" }
+diagnostic-engine = { path = "../diagnostic-engine" }
+serde.workspace = true
