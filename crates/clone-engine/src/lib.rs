@@ -1,8 +1,9 @@
+use serde::{Deserialize,Serialize};
 use safety_policy::{validate_block_clone,OperationPlan,PlanConfirmation};
 use sha2::{Digest,Sha256};
 use std::io::{self,Read,Seek,SeekFrom,Write};
 use thiserror::Error;
-#[derive(Debug,Clone,PartialEq,Eq)]pub struct CopyReport{pub bytes_copied:u64,pub sha256:String}
+#[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]pub struct CopyReport{pub bytes_copied:u64,pub sha256:String}
 #[derive(Debug,Error)]pub enum CloneError{
 #[error("Unsafe plan: {0}")]UnsafePlan(String),#[error("Confirmation mismatch: {0}")]Confirmation(String),
 #[error("Expected physical block devices.")]NotBlockDevices,#[error("Device is mounted or system-critical.")]MountedOrSystem,

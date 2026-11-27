@@ -1,6 +1,7 @@
+use serde::{Deserialize,Serialize};
 use safety_policy::{validate_restore,EndpointKind,JobKind,OperationPlan,PlanConfirmation,StorageEndpoint};
 use sha2::{Digest,Sha256};use std::{fs::{self,File,OpenOptions},io::{self,Read,Seek,SeekFrom,Write},path::Path};use thiserror::Error;
-#[derive(Debug,Clone,PartialEq,Eq)]pub struct ImageReport{pub bytes_processed:u64,pub sha256:String}
+#[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]pub struct ImageReport{pub bytes_processed:u64,pub sha256:String}
 #[derive(Debug,Error)]pub enum ImagingError{
 #[error("Invalid plan: {0}")]Plan(String),#[error("Confirmation: {0}")]Confirmation(String),#[error("Wrong endpoint type.")]WrongType,
 #[error("Image and target share a physical device.")]SameDevice,#[error("Target is mounted/system-critical.")]UnsafeTarget,
