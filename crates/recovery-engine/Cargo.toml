@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 decode-core = { path = "../decode-core" }
+safety-policy = { path = "../safety-policy" }
 serde.workspace = true
 thiserror.workspace = true
 uuid.workspace = true

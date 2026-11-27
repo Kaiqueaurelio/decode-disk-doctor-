@@ -12,6 +12,7 @@ members = [
   "crates/report-engine",
   "crates/safety-policy",
   "crates/image-format",
+  "crates/file-recovery-engine",
   "apps/desktop/src-tauri",
 ]
 
