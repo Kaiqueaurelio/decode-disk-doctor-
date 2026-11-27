@@ -15,14 +15,26 @@ if n==0{return Err(CloneError::Io(io::Error::new(io::ErrorKind::UnexpectedEof,"s
 w.write_all(&b[..n])?;h.update(&b[..n]);done+=n as u64;left-=n as u64;}w.flush()?;
 Ok(CopyReport{bytes_copied:done,sha256:format!("{:x}",h.finalize())})}
 pub fn clone_block_device(p:&OperationPlan,c:&PlanConfirmation)->Result<CopyReport,CloneError>{
-validate_block_clone(p).map_err(|e|CloneError::UnsafePlan(e.to_string()))?;c.validate_for(p).map_err(|e|CloneError::Confirmation(e.to_string()))?;
+validate_block_clone(p).map_err(|e|CloneError::UnsafePlan(e.to_string()))?;
+c.validate_for(p).map_err(|e|CloneError::Confirmation(e.to_string()))?;
 if p.requested_bytes==0{return Err(CloneError::Empty)}
-#[cfg(target_os="linux")]{use std::{fs::{self,OpenOptions},os::unix::fs::{FileTypeExt,MetadataExt},path::Path};
-let s=Path::new(&p.source.path);let d=Path::new(&p.destination.path);let sm=fs::metadata(s)?;let dm=fs::metadata(d)?;
+#[cfg(target_os="linux")]{use std::{fs::{self,OpenOptions},os::unix::fs::FileTypeExt,path::Path};
+let sp=Path::new(&p.source.path);let dp=Path::new(&p.destination.path);
+let sm=fs::metadata(sp)?;let dm=fs::metadata(dp)?;
 if !sm.file_type().is_block_device()||!dm.file_type().is_block_device(){return Err(CloneError::NotBlockDevices)}
-let sd=dev(sm.rdev());let dd=dev(dm.rdev());if sd==dd{return Err(CloneError::SameDevice)}safe_mount(sd)?;safe_mount(dd)?;
-let mut src=fs::File::open(s)?;let mut dst=OpenOptions::new().write(true).open(d)?;let r=copy_exact(&mut src,&mut dst,p.requested_bytes)?;dst.sync_all()?;Ok(r)}
+let sd=dev(sm.rdev());let dd=dev(dm.rdev());if sd==dd{return Err(CloneError::SameDevice)}
+safe_mount(sd)?;safe_mount(dd)?;
+let mut src=fs::File::open(sp)?;let src_capacity=block_capacity(&src)?;if p.requested_bytes>src_capacity{return Err(CloneError::CapacityMismatch)}
+let mut dst=OpenOptions::new().read(true).write(true).open(dp)?;let dst_capacity=block_capacity(&dst)?;if p.requested_bytes>dst_capacity{return Err(CloneError::CapacityMismatch)}
+let copied=copy_exact(&mut src,&mut dst,p.requested_bytes)?;dst.sync_all()?;
+dst.seek(SeekFrom::Start(0))?;let verified=copy_exact(&mut dst,&mut io::sink(),p.requested_bytes)?;
+if copied.sha256!=verified.sha256{return Err(CloneError::VerificationFailed)}Ok(copied)}
 #[cfg(not(target_os="linux"))]{let _=(p,c);Err(CloneError::Unsupported)}}
+#[cfg(target_os="linux")]fn block_capacity(file:&std::fs::File)->Result<u64,CloneError>{
+use std::os::unix::io::AsRawFd;let mut bytes=0u64;
+let rc=unsafe{libc::ioctl(file.as_raw_fd(),0x80081272 as libc::c_ulong,&mut bytes)};
+if rc<0{return Err(CloneError::Io(io::Error::last_os_error()))}Ok(bytes)
+}
 #[cfg(target_os="linux")]fn dev(x:u64)->(u64,u64){(libc::major(x as libc::dev_t)as u64,libc::minor(x as libc::dev_t)as u64)}
 #[cfg(target_os="linux")]fn safe_mount(d:(u64,u64))->Result<(),CloneError>{use std::path::PathBuf;
 let t=std::fs::canonicalize(format!("/sys/dev/block/{}:{}",d.0,d.1))?;

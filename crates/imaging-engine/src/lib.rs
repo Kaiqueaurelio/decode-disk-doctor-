@@ -1,10 +1,11 @@
 use safety_policy::{validate_restore,EndpointKind,JobKind,OperationPlan,PlanConfirmation,StorageEndpoint};
-use sha2::{Digest,Sha256};use std::{fs::{self,File,OpenOptions},io::{self,Read,Write},path::Path};use thiserror::Error;
+use sha2::{Digest,Sha256};use std::{fs::{self,File,OpenOptions},io::{self,Read,Seek,SeekFrom,Write},path::Path};use thiserror::Error;
 #[derive(Debug,Clone,PartialEq,Eq)]pub struct ImageReport{pub bytes_processed:u64,pub sha256:String}
 #[derive(Debug,Error)]pub enum ImagingError{
 #[error("Invalid plan: {0}")]Plan(String),#[error("Confirmation: {0}")]Confirmation(String),#[error("Wrong endpoint type.")]WrongType,
 #[error("Image and target share a physical device.")]SameDevice,#[error("Target is mounted/system-critical.")]UnsafeTarget,
-#[error("Invalid image size.")]InvalidSize,#[error("I/O: {0}")]Io(#[from]io::Error),#[error("Linux only.")]Unsupported}
+#[error("Invalid image size or actual disk capacity mismatch.")]InvalidSize,
+#[error("Destination read-back verification failed.")]VerificationFailed,#[error("I/O: {0}")]Io(#[from]io::Error),#[error("Linux only.")]Unsupported}
 fn stream<R:Read,W:Write>(r:&mut R,w:&mut W,len:u64)->Result<ImageReport,ImagingError>{if len==0{return Err(ImagingError::InvalidSize)}
 let mut b=vec![0;1024*1024];let mut left=len;let mut done=0;let mut h=Sha256::new();while left>0{let m=usize::try_from(left.min(b.len()as u64)).unwrap_or(b.len());let n=r.read(&mut b[..m])?;
 if n==0{return Err(ImagingError::Io(io::Error::new(io::ErrorKind::UnexpectedEof,"short source")))}w.write_all(&b[..n])?;h.update(&b[..n]);done+=n as u64;left-=n as u64;}w.flush()?;Ok(ImageReport{bytes_processed:done,sha256:format!("{:x}",h.finalize())})}
@@ -13,17 +14,25 @@ pub fn restore_image_stream<R:Read,W:Write>(r:&mut R,w:&mut W,n:u64)->Result<Ima
 pub fn create_raw_image(s:&StorageEndpoint,path:&Path,target_id:&str,n:u64)->Result<ImageReport,ImagingError>{
 if s.kind!=EndpointKind::BlockDevice||s.stable_identity.as_deref().unwrap_or("").trim().is_empty()||target_id.trim().is_empty()||n==0{return Err(ImagingError::Plan("Source, destination identity and length are required.".into()))}
 #[cfg(target_os="linux")]{use std::os::unix::fs::{FileTypeExt,MetadataExt};let sm=fs::metadata(&s.path)?;if !sm.file_type().is_block_device(){return Err(ImagingError::WrongType)}
+safe_mount(sm.rdev())?;
 let parent=path.parent().filter(|p|!p.as_os_str().is_empty()).unwrap_or(Path::new("."));let pm=fs::metadata(parent)?;if sm.rdev()==pm.dev(){return Err(ImagingError::SameDevice)}
-let mut src=File::open(&s.path)?;let mut dst=OpenOptions::new().write(true).create_new(true).open(path)?;let r=stream(&mut src,&mut dst,n)?;dst.sync_all()?;Ok(r)}
+let mut src=File::open(&s.path)?;let actual=block_capacity(&src)?;if n!=actual{return Err(ImagingError::InvalidSize)}
+let mut dst=OpenOptions::new().write(true).create_new(true).open(path)?;let report=stream(&mut src,&mut dst,actual)?;dst.sync_all()?;
+let mut verify=File::open(path)?;let checked=stream(&mut verify,&mut io::sink(),actual)?;if checked.sha256!=report.sha256{return Err(ImagingError::VerificationFailed)}Ok(report)}
 #[cfg(not(target_os="linux"))]{let _=(s,path,target_id,n);Err(ImagingError::Unsupported)}}
 pub fn restore_raw_image(p:&OperationPlan,c:&PlanConfirmation,path:&Path)->Result<ImageReport,ImagingError>{
 if p.job_kind!=JobKind::Restore||p.source.kind!=EndpointKind::ImageFile||p.destination.kind!=EndpointKind::BlockDevice{return Err(ImagingError::Plan("Image file to block device required.".into()))}
 validate_restore(p).map_err(|e|ImagingError::Plan(e.to_string()))?;c.validate_for(p).map_err(|e|ImagingError::Confirmation(e.to_string()))?;
-#[cfg(target_os="linux")]{use std::os::unix::fs::{FileTypeExt,MetadataExt};let im=fs::symlink_metadata(path)?;if !im.file_type().is_file()||im.file_type().is_symlink()||im.len()==0||im.len()>p.requested_bytes{return Err(ImagingError::InvalidSize)}
+#[cfg(target_os="linux")]{use std::os::unix::fs::{FileTypeExt,MetadataExt};let im=fs::symlink_metadata(path)?;
+if !im.file_type().is_file()||im.file_type().is_symlink()||im.len()==0||im.len()!=p.requested_bytes{return Err(ImagingError::InvalidSize)}
 let dm=fs::metadata(&p.destination.path)?;if !dm.file_type().is_block_device(){return Err(ImagingError::WrongType)}
 let parent=path.parent().filter(|p|!p.as_os_str().is_empty()).unwrap_or(Path::new("."));if fs::metadata(parent)?.dev()==dm.rdev(){return Err(ImagingError::SameDevice)}
-safe_mount(dm.rdev())?;let mut src=File::open(path)?;let mut dst=OpenOptions::new().write(true).open(&p.destination.path)?;let r=stream(&mut src,&mut dst,im.len())?;dst.sync_all()?;Ok(r)}
+safe_mount(dm.rdev())?;let mut src=File::open(path)?;let mut dst=OpenOptions::new().read(true).write(true).open(&p.destination.path)?;
+if im.len()>block_capacity(&dst)?{return Err(ImagingError::InvalidSize)}
+let report=stream(&mut src,&mut dst,im.len())?;dst.sync_all()?;dst.seek(SeekFrom::Start(0))?;
+let verified=stream(&mut dst,&mut io::sink(),im.len())?;if report.sha256!=verified.sha256{return Err(ImagingError::VerificationFailed)}Ok(report)}
 #[cfg(not(target_os="linux"))]{let _=(p,c,path);Err(ImagingError::Unsupported)}}
+#[cfg(target_os="linux")]fn block_capacity(f:&File)->Result<u64,ImagingError>{use std::os::unix::io::AsRawFd;let mut n=0u64;let rc=unsafe{libc::ioctl(f.as_raw_fd(),0x80081272 as libc::c_ulong,&mut n)};if rc<0{return Err(ImagingError::Io(io::Error::last_os_error()))}Ok(n)}
 #[cfg(target_os="linux")]fn safe_mount(x:u64)->Result<(),ImagingError>{use std::path::PathBuf;let d=(libc::major(x as libc::dev_t)as u64,libc::minor(x as libc::dev_t)as u64);
 let t=fs::canonicalize(format!("/sys/dev/block/{}:{}",d.0,d.1))?;for l in fs::read_to_string("/proc/self/mountinfo")?.lines(){let f:Vec<&str>=l.split_whitespace().collect();if f.len()<5{continue}
 let Some((a,b))=f[2].split_once(':')else{continue};let(Ok(a),Ok(b))=(a.parse::<u64>(),b.parse::<u64>())else{continue};let m=fs::canonicalize(format!("/sys/dev/block/{a}:{b}")).unwrap_or_else(|_|PathBuf::new());
