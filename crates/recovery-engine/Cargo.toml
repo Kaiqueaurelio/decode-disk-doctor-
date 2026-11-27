@@ -10,4 +10,4 @@ safety-policy = { path = "../safety-policy" }
 serde.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-\nlibc.workspace = true\n
+libc.workspace = true
