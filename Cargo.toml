@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/decode-core",
+  "crates/device-discovery",
+  "crates/diagnostic-engine",
+  "crates/smart-engine",
+  "crates/imaging-engine",
+  "crates/backup-engine",
+  "crates/clone-engine",
+  "crates/recovery-engine",
+  "crates/report-engine",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "LicenseRef-Decode-Proprietary"
+repository = "https://github.com/Kaiqueaurelio/decode-disk-doctor-"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+time = { version = "0.3", features = ["serde", "formatting"] }
