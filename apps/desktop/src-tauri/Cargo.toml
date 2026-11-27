@@ -15,3 +15,5 @@ tauri-build = { version = "2" }
 tauri = { version = "2" }
 decode-core = { path = "../../../crates/decode-core" }
 device-discovery = { path = "../../../crates/device-discovery" }
+diagnostic-engine = { path = "../../../crates/diagnostic-engine" }
+smart-engine = { path = "../../../crates/smart-engine" }
