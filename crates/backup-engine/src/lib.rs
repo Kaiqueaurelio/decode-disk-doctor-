@@ -26,7 +26,7 @@ pub struct BackupManifest {
 
 impl BackupManifest {
     pub fn validate(&self) -> Result<(), &'static str> {
-        match self.mode {
+        match &self.mode {
             BackupMode::Full if self.parent_manifest.is_some() => {
                 Err("A full backup cannot reference a parent manifest.")
             }
