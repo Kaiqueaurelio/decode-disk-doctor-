@@ -246,11 +246,11 @@ export default function App() {
       setOperationBusy(true);
       if (recoveryMode === "ddrescue") {
         setOperationMessage("ddrescue em execução. A imagem e o mapfile serão preservados para retomada.");
-        const result = await invoke<{ exit_code: number | null; image_path: string; mapfile_path: string }>("run_ddrescue", {
+        const result = await invoke<{ exit_code: number | null; completed: boolean; image_path: string; mapfile_path: string }>("run_ddrescue", {
           source: endpoint(source), destination: endpoint(target), imagePath: recoveryImagePath,
           mapfilePath: recoveryMapPath, requestedBytes: source.capacity_bytes, confirmationPhrase: recoveryPhraseInput
         });
-        setOperationMessage(`ddrescue finalizado (código ${result.exit_code}). Imagem: ${result.image_path} · Mapfile: ${result.mapfile_path}`);
+        setOperationMessage(`ddrescue ${result.completed ? "concluído" : "interrompido com dados parciais"} (código ${result.exit_code}). Imagem: ${result.image_path} · Mapfile: ${result.mapfile_path}`);
       } else {
         setOperationMessage("PhotoRec em execução. Não desconecte os dispositivos.");
         const result = await invoke<{ exit_code: number | null; output_directory: string }>("recover_files_photorec", {

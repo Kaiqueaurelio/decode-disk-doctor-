@@ -71,7 +71,12 @@ _=>return Err(PhotoRecExecutionError::InvalidSource)};
 let dm=std::fs::metadata(&p.destination.path).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;
 if !dm.file_type().is_block_device(){return Err(PhotoRecExecutionError::InvalidDestination)}
 verify_identity(sd,p.source.stable_identity.as_deref().unwrap_or(""))?;verify_identity(dm.rdev(),p.destination.stable_identity.as_deref().unwrap_or(""))?;
-let out=std::fs::metadata(&p.output_directory).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;
+let requested=Path::new(&p.output_directory);
+let existing=requested.ancestors().find(|candidate|candidate.exists()).ok_or(PhotoRecExecutionError::InvalidDestination)?;
+let existing_meta=std::fs::metadata(existing).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;
+if !existing_meta.is_dir()||!same_physical_disk(existing_meta.dev(),dm.rdev())?||same_physical_disk(existing_meta.dev(),sd)?{return Err(PhotoRecExecutionError::InvalidDestination)}
+std::fs::create_dir_all(requested).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;
+let out=std::fs::metadata(requested).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;
 if !out.is_dir()||!same_physical_disk(out.dev(),dm.rdev())?||same_physical_disk(out.dev(),sd)?{return Err(PhotoRecExecutionError::InvalidDestination)}
 let args=photorec_args(p).map_err(|e|PhotoRecExecutionError::Start(e.to_string()))?;
 let status=Command::new("photorec").args(&args).status().map_err(|e|PhotoRecExecutionError::Start(e.to_string()))?;
