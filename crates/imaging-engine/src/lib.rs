@@ -6,7 +6,7 @@ use sha2::{Digest,Sha256};use std::{fs::{self,File,OpenOptions},io::{self,Read,S
 #[error("Invalid plan: {0}")]Plan(String),#[error("Confirmation: {0}")]Confirmation(String),#[error("Wrong endpoint type.")]WrongType,
 #[error("Image and target share a physical device.")]SameDevice,#[error("Target is mounted/system-critical.")]UnsafeTarget,
 #[error("Invalid image size or actual disk capacity mismatch.")]InvalidSize,
-#[error("Destination read-back verification failed.")]VerificationFailed,#[error("I/O: {0}")]Io(#[from]io::Error),#[error("Linux only.")]Unsupported}
+#[error("Destination read-back verification failed.")]VerificationFailed,#[error("The current device serial does not match the selected device identity.")]IdentityMismatch,#[error("I/O: {0}")]Io(#[from]io::Error),#[error("Linux only.")]Unsupported}
 fn stream<R:Read,W:Write>(r:&mut R,w:&mut W,len:u64)->Result<ImageReport,ImagingError>{if len==0{return Err(ImagingError::InvalidSize)}
 let mut b=vec![0;1024*1024];let mut left=len;let mut done=0;let mut h=Sha256::new();while left>0{let m=usize::try_from(left.min(b.len()as u64)).unwrap_or(b.len());let n=r.read(&mut b[..m])?;
 if n==0{return Err(ImagingError::Io(io::Error::new(io::ErrorKind::UnexpectedEof,"short source")))}w.write_all(&b[..n])?;h.update(&b[..n]);done+=n as u64;left-=n as u64;}w.flush()?;Ok(ImageReport{bytes_processed:done,sha256:format!("{:x}",h.finalize())})}
@@ -19,7 +19,7 @@ if s.kind!=EndpointKind::BlockDevice||destination.kind!=EndpointKind::BlockDevic
 ||s.stable_identity==destination.stable_identity||n==0{return Err(ImagingError::Plan("Distinct source and destination block devices with stable identities are required.".into()))}
 #[cfg(target_os="linux")]{use std::os::unix::fs::{FileTypeExt,MetadataExt};let sm=fs::metadata(&s.path)?;let dm=fs::metadata(&destination.path)?;
 if !sm.file_type().is_block_device()||!dm.file_type().is_block_device(){return Err(ImagingError::WrongType)}
-safe_mount(sm.rdev())?;
+verify_identity(sm.rdev(),s.stable_identity.as_deref().unwrap_or(""))?;verify_identity(dm.rdev(),destination.stable_identity.as_deref().unwrap_or(""))?;safe_mount(sm.rdev())?;
 let parent=path.parent().filter(|p|!p.as_os_str().is_empty()).unwrap_or(Path::new("."));let pm=fs::metadata(parent)?;
 if same_physical_disk(sm.rdev(),dm.rdev())?{return Err(ImagingError::SameDevice)}
 if !same_physical_disk(pm.dev(),dm.rdev())?{return Err(ImagingError::Plan("Image path is not on the selected destination disk.".into()))}
@@ -33,7 +33,7 @@ validate_restore(p).map_err(|e|ImagingError::Plan(e.to_string()))?;c.validate_fo
 #[cfg(target_os="linux")]{use std::os::unix::fs::{FileTypeExt,MetadataExt};let im=fs::symlink_metadata(path)?;
 if !im.file_type().is_file()||im.file_type().is_symlink()||im.len()==0||im.len()!=p.requested_bytes{return Err(ImagingError::InvalidSize)}
 let dm=fs::metadata(&p.destination.path)?;if !dm.file_type().is_block_device(){return Err(ImagingError::WrongType)}
-let parent=path.parent().filter(|p|!p.as_os_str().is_empty()).unwrap_or(Path::new("."));if same_physical_disk(fs::metadata(parent)?.dev(),dm.rdev())?{return Err(ImagingError::SameDevice)}
+let parent=path.parent().filter(|p|!p.as_os_str().is_empty()).unwrap_or(Path::new("."));let source_storage=fs::metadata(parent)?.dev();verify_identity(source_storage,p.source.stable_identity.as_deref().unwrap_or(""))?;verify_identity(dm.rdev(),p.destination.stable_identity.as_deref().unwrap_or(""))?;if same_physical_disk(source_storage,dm.rdev())?{return Err(ImagingError::SameDevice)}
 safe_mount(dm.rdev())?;let mut src=File::open(path)?;let mut dst=OpenOptions::new().read(true).write(true).open(&p.destination.path)?;
 if im.len()>block_capacity(&dst)?{return Err(ImagingError::InvalidSize)}
 let report=stream(&mut src,&mut dst,im.len())?;dst.sync_all()?;dst.seek(SeekFrom::Start(0))?;
@@ -45,6 +45,7 @@ let d=(libc::major(raw as libc::dev_t)as u64,libc::minor(raw as libc::dev_t)as u
 let p=fs::canonicalize(format!("/sys/dev/block/{}:{}",d.0,d.1))?;
 if p.join("partition").exists(){Ok(p.parent().unwrap_or(&p).to_path_buf())}else{Ok(p)}}
 #[cfg(target_os="linux")]fn same_physical_disk(a:u64,b:u64)->Result<bool,ImagingError>{Ok(sysfs_disk_root(a)?==sysfs_disk_root(b)?)}
+#[cfg(target_os="linux")]fn verify_identity(raw:u64,expected:&str)->Result<(),ImagingError>{let root=sysfs_disk_root(raw)?;let serial=fs::read_to_string(root.join("device/serial")).unwrap_or_default();let vendor=fs::read_to_string(root.join("device/vendor")).unwrap_or_default();let actual=format!("serial:{}:{}",vendor.trim(),serial.trim());if serial.trim().is_empty()||actual!=expected{return Err(ImagingError::IdentityMismatch)}Ok(())}
 #[cfg(target_os="linux")]fn safe_mount(raw:u64)->Result<(),ImagingError>{
 let target=sysfs_disk_root(raw)?;
 for line in fs::read_to_string("/proc/self/mountinfo")?.lines(){let f:Vec<&str>=line.split_whitespace().collect();if f.len()<5{continue}

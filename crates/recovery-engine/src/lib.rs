@@ -106,7 +106,7 @@ pub struct DdrescueReport{pub exit_code:Option<i32>,pub image_path:String,pub ma
 #[error("Source is not a Linux block device.")]InvalidSource,
 #[error("Image and mapfile must be on one separate destination filesystem.")]InvalidDestination,
 #[error("Image and mapfile must both exist for resume or both be new.")]IncompleteResumePair,
-#[error("Could not start ddrescue: {0}")]Start(String),#[error("ddrescue failed with code {0:?}")]Failed(Option<i32>),
+#[error("Could not start ddrescue: {0}")]Start(String),#[error("ddrescue failed with code {0:?}")]Failed(Option<i32>),#[error("Selected disk identity does not match current hardware serial.")]IdentityMismatch,
 #[error("Linux only.")]Unsupported}
 pub fn run_ddrescue_first_pass(p:&DdrescuePlan)->Result<DdrescueReport,DdrescueExecutionError>{
 let args=p.first_pass_args().map_err(|e|DdrescueExecutionError::Start(e.to_string()))?;
@@ -118,6 +118,7 @@ let idir=ip.parent().filter(|x|!x.as_os_str().is_empty()).unwrap_or(Path::new(".
 let im=std::fs::metadata(idir).map_err(|_|DdrescueExecutionError::InvalidDestination)?;let mm=std::fs::metadata(mdir).map_err(|_|DdrescueExecutionError::InvalidDestination)?;
 let dm=std::fs::metadata(&p.destination_device_path).map_err(|_|DdrescueExecutionError::InvalidDestination)?;
 if !dm.file_type().is_block_device()||!im.is_dir()||!mm.is_dir()||im.dev()!=mm.dev()
+verify_identity(sm.rdev(),p.source.stable_identity.as_deref().unwrap_or(""))?;verify_identity(dm.rdev(),&p.destination_storage_identity)?;
 ||same_physical_disk(im.dev(),sm.rdev()).map_err(|e|DdrescueExecutionError::Start(e.to_string()))?
 ||!same_physical_disk(im.dev(),dm.rdev()).map_err(|e|DdrescueExecutionError::Start(e.to_string()))?{
 return Err(DdrescueExecutionError::InvalidDestination)}
@@ -130,6 +131,7 @@ Ok(DdrescueReport{exit_code:status.code(),image_path:p.destination_image_path.cl
 #[cfg(not(target_os="linux"))]{let _=(p,args);Err(DdrescueExecutionError::Unsupported)}}
 
 #[cfg(target_os="linux")]fn disk_root(raw:u64)->Result<std::path::PathBuf,std::io::Error>{let a=libc::major(raw as libc::dev_t)as u64;let b=libc::minor(raw as libc::dev_t)as u64;let p=std::fs::canonicalize(format!("/sys/dev/block/{a}:{b}"))?;if p.join("partition").exists(){Ok(p.parent().unwrap_or(&p).to_path_buf())}else{Ok(p)}}
+#[cfg(target_os="linux")]fn verify_identity(raw:u64,expected:&str)->Result<(),DdrescueExecutionError>{let root=disk_root(raw).map_err(|e|DdrescueExecutionError::Start(e.to_string()))?;let serial=std::fs::read_to_string(root.join("device/serial")).unwrap_or_default();let vendor=std::fs::read_to_string(root.join("device/vendor")).unwrap_or_default();let actual=format!("serial:{}:{}",vendor.trim(),serial.trim());if serial.trim().is_empty()||actual!=expected{return Err(DdrescueExecutionError::IdentityMismatch)}Ok(())}
 #[cfg(target_os="linux")]fn same_physical_disk(a:u64,b:u64)->Result<bool,std::io::Error>{Ok(disk_root(a)?==disk_root(b)?)}
 #[cfg(test)]
 mod tests {
