@@ -61,7 +61,7 @@ impl OperationPlan {
 
     /// Validate invariants only. This does not authorize or execute a write.
     pub fn validate(&self) -> Result<(), SafetyError> {
-        match self.kind {
+        match &self.kind {
             OperationKind::ReadOnlyDiagnostic => {
                 if self.destination.is_some() {
                     return Err(SafetyError::UnexpectedDestination);
