@@ -93,6 +93,23 @@ scripts/
 
 Directories will be added as their corresponding implementations land. This layout is the target architecture, not a claim that every module is already implemented.
 
+
+## Current implementation status
+
+The first development slice is committed:
+
+- Tauri 2 + React + TypeScript desktop application scaffold
+- Decode dark/blue dashboard
+- Read-only Linux block-device discovery through sysfs
+- Read-only smartmontools adapter using JSON output and direct process arguments
+- Shared Rust domain contracts and unit tests for source/destination safety
+- Initial contracts for diagnostics, imaging, backup manifests, clone planning, recovery sessions and service reports
+- GitHub Actions workflow for Rust core checks and frontend compilation
+
+This is an early foundation, not a finished disk utility. The desktop runtime and CI have not yet been verified on physical hardware. Windows device discovery, NVMe-specific validation, SQLite persistence, surface scans, benchmark, actual image/backup/clone/restore execution, PDF generation and the Ubuntu Recovery USB remain pending.
+
+To run the desktop app, follow docs/development/DEVELOPMENT.md. The SMART feature requires smartmontools installed separately and appropriate device permissions.
+
 ## Development status
 
 See [ROADMAP.md](ROADMAP.md), [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md), [SAFETY.md](docs/safety/SAFETY.md) and [THIRD_PARTY.md](THIRD_PARTY.md).
