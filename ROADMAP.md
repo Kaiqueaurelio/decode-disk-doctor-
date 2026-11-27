@@ -7,20 +7,20 @@ This roadmap describes intended work, not completed functionality. A feature is 
 - [x] Define target monorepo architecture
 - [x] Add proprietary license notice for original code
 - [x] Add third-party compliance register
-- [ ] Add CI for formatting, linting, tests and security checks
-- [ ] Add reproducible development environment
-- [ ] Add threat model and release checklist
+- [x] Add CI workflow for formatting, linting, core tests and frontend build (first run not yet verified)
+- [x] Add local development and setup guide
+- [x] Add initial threat model (release checklist pending)
 
 ## Phase 1 — Read-only desktop MVP
 - [x] Tauri 2 desktop shell scaffold (Windows/Linux targets configured; runtime validation pending)
 - [x] React + TypeScript dashboard scaffold and Decode visual system
 - [x] Read-only Linux block-device discovery with sysfs identity (Windows provider pending)
-- [ ] Hardware inventory and device detail
+- [x] Basic hardware inventory and device detail view
 - [x] smartmontools read-only SMART adapter (NVMe field mapping still requires device validation)
-- [ ] Temperature reporting where supported
+- [x] Temperature field mapping in SMART response (device-specific validation pending)
 - [ ] SQLite history and structured operation logs
 - [ ] Exportable diagnostic report
-- [ ] Safe fixture-based tests
+- [x] Initial fixture-based and safety contract unit tests
 
 ## Phase 2 — Diagnostics
 - [ ] Surface scan with explicit read-only mode
