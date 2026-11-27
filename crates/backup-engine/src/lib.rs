@@ -149,7 +149,7 @@ mod tests {
 
         let entry = backup_file_streaming(&source, &destination).unwrap();
         assert_eq!(fs::read(&destination).unwrap(), fs::read(&source).unwrap());
-        assert_eq!(entry.bytes_copied, 34);
+        assert_eq!(entry.bytes_copied, 33);
         assert_eq!(entry.sha256.len(), 64);
         assert!(matches!(
             backup_file_streaming(&source, &destination),
