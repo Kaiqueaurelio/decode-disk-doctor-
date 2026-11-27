@@ -105,6 +105,7 @@ fn discover_windows() -> Result<Vec<DeviceIdentity>, DiscoveryError> {
     parse_windows_inventory(&String::from_utf8_lossy(&output.stdout))
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn parse_windows_inventory(raw: &str) -> Result<Vec<DeviceIdentity>, DiscoveryError> {
     use serde_json::Value;
 
