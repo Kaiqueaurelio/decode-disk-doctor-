@@ -24,7 +24,7 @@ Build the frontend with npm run build. Build native bundles with npm run tauri b
 
 The initial storage discovery provider reads Linux sysfs metadata and does not open raw disks. SMART inspection invokes smartctl directly using an argument array and read-only flags. Install smartmontools separately and ensure the current user has permission to query the selected device.
 
-The initial discovery provider does not yet enumerate Windows devices. Do not interpret an unsupported-platform response as evidence that no disks exist.
+Windows discovery uses a fixed, read-only PowerShell CIM query. Runtime validation on real Windows hardware remains pending.
 
 ## Rust workspace
 
