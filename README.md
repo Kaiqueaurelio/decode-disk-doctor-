@@ -31,14 +31,24 @@ A local-first desktop and bootable recovery toolkit for technicians and advanced
 
 ## Current implementation status
 
-The repository includes a Tauri/React desktop scaffold, Linux/Windows discovery paths, a read-only smartmontools adapter, shared domain contracts, an initial backup manifest, image/clone/recovery planning contracts and CI configuration.
+The desktop UI is now connected to Linux physical-operation commands for cloning, raw imaging, image inspection, restoration, GNU ddrescue acquisition and PhotoRec file recovery.
 
-The continuity branch adds:
-- centralized safety preflight and SHA-256 plan-bound confirmation;
-- image manifest v1 validation and streaming chunk verification;
-- single-file streaming backup with SHA-256 and no-overwrite publication.
+Implemented Linux execution paths:
+- **Physical clone:** source and destination block-device checks, hardware-serial revalidation, mounted/system-disk rejection, actual capacity checks, streaming copy, SHA-256 and destination read-back verification.
+- **Raw image acquisition:** read-only block source, new-file-only output, selected destination-disk verification, free-space check, full-stream SHA-256 and image read-back verification.
+- **Image inspection and restore:** image size/hash inspection; restore requires a plan-bound confirmation, a separate image storage device, an unmounted destination, actual capacity validation and post-write read-back verification.
+- **GNU ddrescue:** conservative first pass with a persistent mapfile; partial image/mapfile pairs are preserved for resume.
+- **PhotoRec:** real process execution with a separate destination filesystem; the output folder is created only after the destination disk is verified.
+- **Backup:** single regular-file streaming backup with SHA-256 and no-overwrite publication.
 
-These are foundational components, not a complete backup or disk-imaging product. Directory backup, SQLite persistence, supervised external-process adapters, raw imaging, clone, restore, file recovery, Recovery ISO and hardware validation remain pending. Tests added in this branch must be run by CI or a local Rust toolchain before they can be called passing.
+Important limitations remain:
+- Physical block-device execution is currently **Linux-only**. Windows physical clone/restore adapters are not implemented.
+- Real-device validation on disposable hardware has not yet been performed; CI tests validate streaming logic and contracts, not actual hardware behavior.
+- Raw-device access requires suitable OS permissions. A dedicated privilege broker/polkit helper is not yet implemented.
+- Process progress, cancellation, persistent operation history/audit storage, automatic mount management and full GUI path pickers remain unfinished.
+- GNU ddrescue, PhotoRec and smartmontools must be installed separately. Recovery ISO and directory/incremental backup remain pending.
+
+Do not use production or system disks for initial validation. See [Physical operations and safety](docs/PHYSICAL_OPERATIONS.md) before running any destructive workflow. Passing CI is not a substitute for disposable-device testing.
 
 ## Repository layout
 
