@@ -60,7 +60,7 @@ impl ImageManifest {
         }
         if self.sector_size_bytes == 0
             || self.chunk_size_bytes == 0
-            || self.chunk_size_bytes % u64::from(self.sector_size_bytes) != 0
+            || !self.chunk_size_bytes.is_multiple_of(u64::from(self.sector_size_bytes))
         {
             return Err(ImageFormatError::InvalidGeometry);
         }
@@ -72,8 +72,8 @@ impl ImageManifest {
             }
             if chunk.length_bytes == 0
                 || chunk.length_bytes > self.chunk_size_bytes
-                || chunk.offset_bytes % u64::from(self.sector_size_bytes) != 0
-                || chunk.length_bytes % u64::from(self.sector_size_bytes) != 0
+                || !chunk.offset_bytes.is_multiple_of(u64::from(self.sector_size_bytes))
+                || !chunk.length_bytes.is_multiple_of(u64::from(self.sector_size_bytes))
             {
                 return Err(ImageFormatError::InvalidGeometry);
             }

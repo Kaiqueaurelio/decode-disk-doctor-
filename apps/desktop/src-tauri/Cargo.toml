@@ -17,3 +17,4 @@ decode-core = { path = "../../../crates/decode-core" }
 device-discovery = { path = "../../../crates/device-discovery" }
 diagnostic-engine = { path = "../../../crates/diagnostic-engine" }
 smart-engine = { path = "../../../crates/smart-engine" }
+recovery-engine = { path = "../../../crates/recovery-engine" }\n

@@ -4,7 +4,7 @@
 use decode_core::DeviceIdentity;
 use safety_policy::{EndpointKind, StorageEndpoint};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::{path::Path, process::Command};
 use thiserror::Error;
 use uuid::Uuid;
 

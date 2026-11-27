@@ -3,7 +3,7 @@
 
 use safety_policy::{EndpointKind, StorageEndpoint};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::{path::Path, process::Command};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -41,7 +41,7 @@ impl FileRecoveryPlan {
         if self.output_directory.trim().is_empty() || !Path::new(&self.output_directory).is_absolute() {
             return Err(FileRecoveryError::InvalidOutputPath);
         }
-        if self.source.kind != EndpointKind::BlockDevice {
+        if !matches!(self.source.kind, EndpointKind::BlockDevice | EndpointKind::ImageFile) {
             return Err(FileRecoveryError::MissingIdentity);
         }
         Ok(())
@@ -69,7 +69,7 @@ mod tests {
             destination: endpoint("destination", false, false),
             output_directory: "/mnt/recovery/files".into() };
         assert!(plan.validate_photorec().is_ok());
-        assert!(plan.validate_testdisk_analysis(false).is_ok());
+        assert!(plan.validate_testdisk_analysis(false).is_ok());\n        assert_eq!(photorec_args(&plan).unwrap(), vec!["/log", "/d", "/mnt/recovery/files", "/dev/source"]);
     }
 
     #[test]
