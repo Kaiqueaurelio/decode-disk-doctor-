@@ -164,17 +164,22 @@ mod tests {
         let root = std::env::temp_dir().join(format!("decode-sysfs-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("sda/device")).unwrap();
+        fs::create_dir_all(root.join("sdb/device")).unwrap();
         fs::create_dir_all(root.join("loop0")).unwrap();
         fs::write(root.join("sda/size"), "2048").unwrap();
         fs::write(root.join("sda/device/model"), "Fixture Disk").unwrap();
         fs::write(root.join("sda/device/serial"), "FIXTURE-01").unwrap();
+        fs::write(root.join("sdb/size"), "4096").unwrap();
         fs::write(root.join("loop0/size"), "2048").unwrap();
 
         let result = discover_linux(&root).unwrap();
-        assert_eq!(result.len(), 1);
+        assert_eq!(result.len(), 2);
         assert_eq!(result[0].device_path, "/dev/sda");
         assert_eq!(result[0].capacity_bytes, 1_048_576);
         assert_eq!(result[0].serial.as_deref(), Some("FIXTURE-01"));
+        assert_eq!(result[0].stable_id.as_deref(), Some("serial::FIXTURE-01"));
+        assert_eq!(result[1].device_path, "/dev/sdb");
+        assert!(result[1].stable_id.is_none(), "topology alone must not become a hardware identity");
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -186,5 +191,6 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].capacity_bytes, 1_000_000_000);
         assert_eq!(result[0].serial.as_deref(), Some("SER-01"));
+        assert_eq!(result[0].stable_id.as_deref(), Some("serial:Example SSD:SER-01"));
     }
 }
