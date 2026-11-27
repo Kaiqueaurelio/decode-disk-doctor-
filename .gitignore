@@ -1,0 +1,42 @@
+# Rust
+/target
+**/target
+Cargo.lock
+
+# Node
+node_modules
+dist
+.vite
+.tauri
+*.log
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Build outputs
+/build
+/release
+*.AppImage
+*.iso
+*.img
+*.qcow2
+*.vmdk
+*.vdi
+
+# Test disk images and local databases
+*.dd
+*.raw
+*.sqlite
+*.sqlite3
+*.db
