@@ -101,7 +101,10 @@ pub fn backup_file_streaming(source: &Path, destination: &Path) -> Result<FileBa
         }
         return Err(FileBackupError::Io(error));
     }
-    fs::remove_file(&temp_path)?;
+    // Publication has already succeeded. A cleanup failure must not report the
+    // backup as failed after the destination is visible; leave the hidden temp
+    // file for later cleanup instead of misrepresenting the committed result.
+    let _ = fs::remove_file(&temp_path);
 
     Ok(FileBackupEntry {
         source_path: source.to_path_buf(),

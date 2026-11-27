@@ -59,8 +59,9 @@ fn discover_linux(root: &Path) -> Result<Vec<DeviceIdentity>, DiscoveryError> {
         let vendor = read_trimmed(base.join("device/vendor").as_path()).unwrap_or_default();
         let serial = read_trimmed(base.join("device/serial").as_path());
         let removable = read_trimmed(base.join("removable").as_path()).as_deref() == Some("1");
-        let sysfs_canonical = fs::canonicalize(&base).unwrap_or(base.clone());
-        let stable_id = Some(format!("sysfs:{}", sysfs_canonical.display()));
+        // sysfs canonical paths describe topology, not the physical drive identity.
+        // Only expose a stable identifier when hardware provides a serial number.
+        let stable_id = serial.as_ref().map(|value| format!("serial:{vendor}:{value}"));
 
         let display_model = if vendor.is_empty() {
             model
@@ -135,8 +136,9 @@ fn parse_windows_inventory(raw: &str) -> Result<Vec<DeviceIdentity>, DiscoveryEr
         let model = row.get("Model").and_then(Value::as_str).unwrap_or("Unknown disk").trim().to_string();
         let serial = row.get("SerialNumber").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
         let pnp = row.get("PNPDeviceID").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
-        let stable_id = pnp.map(|id| format!("pnp:{id}"))
-            .or_else(|| serial.as_ref().map(|id| format!("serial:{id}")));
+        // PNP IDs describe enumeration/topology and may survive device replacement.
+        // Require a hardware serial for a write-grade stable identifier.
+        let stable_id = serial.as_ref().map(|id| format!("serial:{model}:{id}"));
 
         devices.push(DeviceIdentity {
             device_path: device_path.to_string(),
