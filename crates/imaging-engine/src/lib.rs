@@ -24,7 +24,7 @@ let dm=fs::metadata(&p.destination.path)?;if !dm.file_type().is_block_device(){r
 let parent=path.parent().filter(|p|!p.as_os_str().is_empty()).unwrap_or(Path::new("."));if fs::metadata(parent)?.dev()==dm.rdev(){return Err(ImagingError::SameDevice)}
 safe_mount(dm.rdev())?;let mut src=File::open(path)?;let mut dst=OpenOptions::new().write(true).open(&p.destination.path)?;let r=stream(&mut src,&mut dst,im.len())?;dst.sync_all()?;Ok(r)}
 #[cfg(not(target_os="linux"))]{let _=(p,c,path);Err(ImagingError::Unsupported)}}
-#[cfg(target_os="linux")]fn safe_mount(x:u64)->Result<(),ImagingError>{use std::path::PathBuf;let d=unsafe{(libc::major(x as libc::dev_t)as u64,libc::minor(x as libc::dev_t)as u64)};
+#[cfg(target_os="linux")]fn safe_mount(x:u64)->Result<(),ImagingError>{use std::path::PathBuf;let d=(libc::major(x as libc::dev_t)as u64,libc::minor(x as libc::dev_t)as u64);
 let t=fs::canonicalize(format!("/sys/dev/block/{}:{}",d.0,d.1))?;for l in fs::read_to_string("/proc/self/mountinfo")?.lines(){let f:Vec<&str>=l.split_whitespace().collect();if f.len()<5{continue}
 let Some((a,b))=f[2].split_once(':')else{continue};let(Ok(a),Ok(b))=(a.parse::<u64>(),b.parse::<u64>())else{continue};let m=fs::canonicalize(format!("/sys/dev/block/{a}:{b}")).unwrap_or_else(|_|PathBuf::new());
 if !m.as_os_str().is_empty()&&(m==t||m.starts_with(&t)||t.starts_with(&m)){return Err(ImagingError::UnsafeTarget)}}Ok(())}
