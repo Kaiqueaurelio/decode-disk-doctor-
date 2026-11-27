@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn parses_windows_disk_inventory_without_device_access() {
-        let raw = r#"[{"DeviceID":"\\.\PHYSICALDRIVE0","Model":"Example SSD","SerialNumber":"SER-01","Size":"1000000000","PNPDeviceID":"SCSI\\DISK&VEN_EXAMPLE"}]"#;
+        let raw = r#"[{"DeviceID":"\\\\.\\PHYSICALDRIVE0","Model":"Example SSD","SerialNumber":"SER-01","Size":"1000000000","PNPDeviceID":"SCSI\\\\DISK&VEN_EXAMPLE"}]"#;
         let result = parse_windows_inventory(raw).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].capacity_bytes, 1_000_000_000);
