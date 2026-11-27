@@ -106,7 +106,7 @@ The first development slice is committed:
 - Initial contracts for diagnostics, imaging, backup manifests, clone planning, recovery sessions and service reports
 - GitHub Actions workflow for Rust core checks and frontend compilation
 
-This is an early foundation, not a finished disk utility. The desktop runtime and CI have not yet been verified on physical hardware. Windows device discovery, NVMe-specific validation, SQLite persistence, surface scans, benchmark, actual image/backup/clone/restore execution, PDF generation and the Ubuntu Recovery USB remain pending.
+This is an early foundation, not a finished disk utility. The desktop runtime and CI have not yet been verified on physical hardware. NVMe-specific validation, SQLite persistence, surface scans, benchmark, actual image/backup/clone/restore execution, PDF generation and the Ubuntu Recovery USB remain pending.
 
 To run the desktop app, follow docs/development/DEVELOPMENT.md. The SMART feature requires smartmontools installed separately and appropriate device permissions.
 
