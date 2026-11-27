@@ -28,6 +28,15 @@ if available_bytes(parent)?<actual{return Err(ImagingError::InsufficientSpace)}
 let mut dst=OpenOptions::new().write(true).create_new(true).open(path)?;let report=stream(&mut src,&mut dst,actual)?;dst.sync_all()?;
 let mut verify=File::open(path)?;let checked=stream(&mut verify,&mut io::sink(),actual)?;if checked.sha256!=report.sha256{return Err(ImagingError::VerificationFailed)}Ok(report)}
 #[cfg(not(target_os="linux"))]{let _=(s,path,destination,n);Err(ImagingError::Unsupported)}}
+
+pub fn inspect_image_file(path:&Path,storage:&StorageEndpoint)->Result<ImageReport,ImagingError>{
+if storage.stable_identity.as_deref().unwrap_or("").trim().is_empty(){return Err(ImagingError::Plan("Image storage identity is required.".into()))}
+#[cfg(target_os="linux")]{use std::os::unix::fs::MetadataExt;let meta=fs::symlink_metadata(path)?;
+if !meta.file_type().is_file()||meta.file_type().is_symlink()||meta.len()==0{return Err(ImagingError::InvalidSize)}
+let parent=path.parent().filter(|p|!p.as_os_str().is_empty()).unwrap_or(Path::new("."));let device=fs::metadata(parent)?.dev();
+verify_identity(device,storage.stable_identity.as_deref().unwrap_or(""))?;
+let mut file=File::open(path)?;stream(&mut file,&mut io::sink(),meta.len())}
+#[cfg(not(target_os="linux"))]{let _=(path,storage);Err(ImagingError::Unsupported)}}
 pub fn restore_raw_image(p:&OperationPlan,c:&PlanConfirmation,path:&Path)->Result<ImageReport,ImagingError>{
 if p.job_kind!=JobKind::Restore||p.source.kind!=EndpointKind::ImageFile||p.destination.kind!=EndpointKind::BlockDevice{return Err(ImagingError::Plan("Image file to block device required.".into()))}
 validate_restore(p).map_err(|e|ImagingError::Plan(e.to_string()))?;c.validate_for(p).map_err(|e|ImagingError::Confirmation(e.to_string()))?;

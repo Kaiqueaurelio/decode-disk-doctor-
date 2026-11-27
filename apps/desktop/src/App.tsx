@@ -163,6 +163,21 @@ export default function App() {
     finally { setOperationBusy(false); }
   }
 
+
+  async function inspectRestoreImage() {
+    const sourceDisk = devices.find((d) => d.device_path === restoreSourceDisk);
+    if (!sourceDisk || !restoreImagePath.trim()) { setOperationMessage("Selecione o armazenamento da imagem e informe o caminho."); return; }
+    try {
+      setOperationBusy(true); setOperationMessage("Verificando arquivo de imagem e identidade do armazenamento...");
+      const result = await invoke<{ bytes_processed: number; sha256: string }>("inspect_disk_image", {
+        imagePath: restoreImagePath, imageStorage: endpoint(sourceDisk)
+      });
+      setRestoreImageBytes(String(result.bytes_processed));
+      setOperationMessage(`Imagem validada: ${formatBytes(result.bytes_processed)} · SHA-256 ${result.sha256}`);
+    } catch (cause) { setOperationMessage(`Não foi possível validar a imagem: ${String(cause)}`); }
+    finally { setOperationBusy(false); }
+  }
+
   async function prepareRestore() {
     const sourceDisk = devices.find((d) => d.device_path === restoreSourceDisk);
     const targetDisk = devices.find((d) => d.device_path === restoreTargetDisk);
@@ -397,6 +412,7 @@ export default function App() {
               </select>
               <label style={{ display: "block", marginTop: 10 }}>Arquivo de imagem</label>
               <input value={restoreImagePath} onChange={(e) => setRestoreImagePath(e.target.value)} placeholder="/mnt/backup/disco.img" style={{ width: "100%", padding: 10 }} />
+              <button className="secondary" disabled={operationBusy} onClick={inspectRestoreImage} style={{ marginTop: 8 }}>Verificar imagem e preencher tamanho</button>
               <label style={{ display: "block", marginTop: 10 }}>Tamanho da imagem em bytes</label>
               <input value={restoreImageBytes} onChange={(e) => setRestoreImageBytes(e.target.value)} placeholder="Ex.: 500107862016" style={{ width: "100%", padding: 10 }} />
               <button className="secondary" disabled={operationBusy} onClick={prepareRestore} style={{ marginTop: 12 }}>Preparar restauração</button>
