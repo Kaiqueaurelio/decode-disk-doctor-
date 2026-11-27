@@ -28,3 +28,8 @@ Never recover files onto the source device. For failing media, image first with 
 ## Testing
 
 Unit tests use in-memory readers, fixtures and temporary regular files. Integration tests must use disposable loop devices or virtual disks. No CI job may write to host block devices. Physical hardware qualification is a separate, explicitly documented release activity.
+
+
+## Physical identity requirements
+
+A sysfs path, /dev/sdX name, mount point or Windows PNP/topology identifier is not sufficient proof of physical-device identity for a destructive operation. Discovery only marks a hardware serial as a write-grade stable identifier. If a serial is unavailable, the device may still be inspected, but clone/restore authorization must fail closed until a platform adapter can resolve a stronger identifier such as WWN/EUI/NGUID. The same physical serial must be treated as the same device even when two OS paths or topology IDs differ.

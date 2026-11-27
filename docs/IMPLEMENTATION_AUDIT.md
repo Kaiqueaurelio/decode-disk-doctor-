@@ -55,3 +55,12 @@ The repository's architecture differs from the earlier local 0.4.3 scaffold. Thi
 ## Validation status
 
 The added Rust tests are committed as source but have not been executed in this environment. Do not describe them as passing until CI or a local Rust toolchain confirms that result.
+
+
+## Follow-up hardening in continuity work
+
+- Device discovery no longer promotes sysfs topology paths or Windows PNP IDs to write-grade physical identities. Hardware serials are required; devices without one remain discoverable but must not pass destructive-operation preflight.
+- Shared identity comparison recognizes matching serials even when OS aliases or topology identifiers differ.
+- Backup publication cleanup is best-effort after the destination hard link is successfully published, avoiding a false failure state after a committed output.
+- Image manifests reject missing source identity, non-sector-aligned chunk geometry and chunks larger than the declared chunk size.
+- CI now runs a workspace compile check in addition to tests and Clippy. Formatting is normalized before validation because legacy repository Rust files were not uniformly rustfmt-formatted.

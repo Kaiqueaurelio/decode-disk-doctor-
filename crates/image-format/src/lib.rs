@@ -32,6 +32,8 @@ pub enum ImageFormatError {
     UnsupportedVersion,
     #[error("Invalid sector or chunk size.")]
     InvalidGeometry,
+    #[error("Source identity is missing.")]
+    MissingSourceIdentity,
     #[error("Chunk indexes or offsets are not contiguous.")]
     NonContiguousChunks,
     #[error("Chunk length exceeds image capacity.")]
@@ -53,7 +55,13 @@ impl ImageManifest {
         if self.format != "decode-disk-image" || self.schema_version != 1 {
             return Err(ImageFormatError::UnsupportedVersion);
         }
-        if self.sector_size_bytes == 0 || self.chunk_size_bytes == 0 {
+        if self.source_identity.trim().is_empty() {
+            return Err(ImageFormatError::MissingSourceIdentity);
+        }
+        if self.sector_size_bytes == 0
+            || self.chunk_size_bytes == 0
+            || self.chunk_size_bytes % u64::from(self.sector_size_bytes) != 0
+        {
             return Err(ImageFormatError::InvalidGeometry);
         }
         let mut expected_offset = 0_u64;
@@ -62,7 +70,13 @@ impl ImageManifest {
             if chunk.index != index as u64 || chunk.offset_bytes != expected_offset {
                 return Err(ImageFormatError::NonContiguousChunks);
             }
-            if chunk.length_bytes == 0 { return Err(ImageFormatError::InvalidGeometry); }
+            if chunk.length_bytes == 0
+                || chunk.length_bytes > self.chunk_size_bytes
+                || chunk.offset_bytes % u64::from(self.sector_size_bytes) != 0
+                || chunk.length_bytes % u64::from(self.sector_size_bytes) != 0
+            {
+                return Err(ImageFormatError::InvalidGeometry);
+            }
             if chunk.sha256.len() != 64 || !chunk.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
                 return Err(ImageFormatError::InvalidDigest);
             }
@@ -113,6 +127,26 @@ mod tests {
             chunks: vec![chunk.clone()] };
         manifest.validate().unwrap();
         verify_chunk_reader(&mut Cursor::new(bytes), &chunk).unwrap();
+    }
+
+    #[test]
+    fn rejects_missing_identity_and_oversized_chunks() {
+        let digest = "a".repeat(64);
+        let mut manifest = ImageManifest {
+            format: "decode-disk-image".into(),
+            schema_version: 1,
+            source_identity: "   ".into(),
+            source_capacity_bytes: 4096,
+            sector_size_bytes: 512,
+            chunk_size_bytes: 1024,
+            total_bytes: 2048,
+            chunks: vec![
+                ImageChunk { index: 0, offset_bytes: 0, length_bytes: 2048, sha256: digest.clone() },
+            ],
+        };
+        assert_eq!(manifest.validate(), Err(ImageFormatError::MissingSourceIdentity));
+        manifest.source_identity = "fixture-device".into();
+        assert_eq!(manifest.validate(), Err(ImageFormatError::InvalidGeometry));
     }
 
     #[test]
