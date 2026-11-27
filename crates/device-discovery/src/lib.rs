@@ -135,7 +135,6 @@ fn parse_windows_inventory(raw: &str) -> Result<Vec<DeviceIdentity>, DiscoveryEr
 
         let model = row.get("Model").and_then(Value::as_str).unwrap_or("Unknown disk").trim().to_string();
         let serial = row.get("SerialNumber").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
-        let pnp = row.get("PNPDeviceID").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
         // PNP IDs describe enumeration/topology and may survive device replacement.
         // Require a hardware serial for a write-grade stable identifier.
         let stable_id = serial.as_ref().map(|id| format!("serial:{model}:{id}"));
