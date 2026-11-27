@@ -1,66 +1,45 @@
-# Implementation audit — repository baseline and continuity port
+# Implementation audit — physical operations milestone
 
 Audit date: 2026-11-27  
 Target branch: `feat/continuity-foundation-v0.4.3`  
 Baseline: `main` at `00fd096428354cfcc35a4857f28c0820f2df4e60`
 
-## Repository facts
+## Repository and architecture
 
-The GitHub repository is not empty. It already contains a Tauri 2 + React + TypeScript desktop scaffold, a Rust workspace, Linux/Windows device discovery, a smartmontools read-only adapter, basic domain contracts, a dashboard, documentation, a proprietary license notice and a GitHub Actions workflow.
+The repository's existing Tauri 2 + React + TypeScript desktop application and Rust workspace were preserved. The work is committed to the feature branch and the pull request remains open; `main` has not been changed.
 
-The repository's architecture differs from the earlier local 0.4.3 scaffold. This continuity port deliberately preserves the repository's existing crate names and APIs instead of replacing the workspace wholesale.
+## Implemented execution paths
 
-## Existing implementation observed
+- **Physical clone (Linux):** opens source read-only and destination read/write only after plan-bound confirmation; requires Linux block-device nodes; revalidates sysfs hardware serials; rejects same physical devices and mounted/system disks; queries actual capacity with BLKGETSIZE64; streams in bounded memory; syncs and hashes the write; reads the destination back and compares SHA-256.
+- **Raw image acquisition (Linux):** reads a physical block device, requires the source to be unmounted, checks the selected destination block device against the actual filesystem containing the output path, verifies distinct physical disks, checks free space, refuses to overwrite an existing image, hashes the image and reads it back for verification.
+- **Image inspection:** checks that the image is a regular file on the selected storage device and returns its byte length and SHA-256.
+- **Raw image restoration (Linux):** requires an image-file source and block-device destination, plan-bound confirmation, matching source/destination serials, distinct physical disks, unmounted target, exact image length and actual target capacity; performs streaming write, sync and read-back hash verification.
+- **GNU ddrescue:** executes a conservative first pass using `--no-scrape`; checks source and destination hardware identity and ensures the image/mapfile are on the selected separate destination disk; preserves partial image/mapfile pairs for resume and reports non-zero exit status without discarding partial recovery data.
+- **PhotoRec:** executes the actual PhotoRec process; supports a block device or regular image as source; validates the selected destination disk against the output directory's physical filesystem; creates the output directory only after checking the destination; never writes recovered files to the source.
+- **Desktop UI:** connected to clone, image acquisition, image inspection, restore, ddrescue and PhotoRec commands. Destructive workflows require a typed, plan-specific confirmation phrase.
 
-- `decode-core`: device identity and initial operation-plan validation.
-- `device-discovery`: Linux sysfs and Windows PowerShell/CIM discovery paths.
-- `smart-engine`: smartctl JSON adapter using direct process arguments.
-- `diagnostic-engine`: diagnostic snapshot/measurement domain.
-- `backup-engine`: backup manifest metadata; no file-copy execution before this port.
-- `imaging-engine`: image job contract; no raw-device imaging execution.
-- `clone-engine`: clone preflight only.
-- `recovery-engine`: recovery session state only.
-- `report-engine`: initial report contract.
-- `apps/desktop`: Tauri command surface and React dashboard.
-- `docs`: architecture, development and safety documentation.
+## Validation
 
-## Continuity changes in this branch
+- Rust workspace formatting and core compile/test/Clippy checks are run by GitHub Actions.
+- The Tauri desktop backend is included in CI compilation with Linux Tauri system libraries.
+- The React frontend is built in CI.
+- The most recent CI run for the current implementation is still being finalized; consult the pull request checks for the final result.
+- Tests use in-memory readers and temporary fixtures. They do **not** prove operation on physical hardware.
 
-- Added `safety-policy` with block clone/restore preflight, stable identity checks, destination guards, SHA-256 plan fingerprint and exact-plan confirmation.
-- Added `image-format` with version-1 manifest validation and streaming SHA-256 chunk verification.
-- Extended `backup-engine` with a regular-file streaming copy primitive, SHA-256 verification metadata, temporary output and no-overwrite publication.
-- Added corresponding unit tests using temporary files and in-memory readers only.
-- Updated workspace package version to 0.2.0 and registered the new crates.
+## Explicit limitations — not production-ready
 
-## Not implemented / not validated
+1. Physical block-device execution is Linux-only. Windows physical clone, image and restore adapters are not implemented.
+2. No disposable physical-disk test has been completed. Hardware-level validation remains required before production use.
+3. No privilege broker/polkit helper exists. Raw-device operations require the application process to already have suitable OS permissions.
+4. No live progress reporting or cancellation for long-running clone, image, ddrescue or PhotoRec operations.
+5. No persistent operation journal/audit database is wired to these commands.
+6. TestDisk partition-write workflows, Recovery ISO, directory/incremental backup and automatic mount management remain unimplemented.
+7. GNU ddrescue, PhotoRec and smartmontools are external dependencies and must be installed on the target system.
 
-- Raw block-device clone, imaging, restore or recovery execution.
-- ddrescue, Partclone, TestDisk or PhotoRec process adapters.
-- SQLite migrations/repository layer.
-- Incremental/differential backup change tracking.
-- Windows/Linux hardware validation.
-- Recovery ISO generation or boot tests.
-- CI results for this branch.
-- Cargo formatting, check, test and Clippy execution in this editing environment.
+## Safety notes
 
-## Known follow-up risks
-
-1. The current smartctl adapter launches a subprocess without an explicit timeout or output cap. Add a supervised process runner before expanding external-tool execution.
-2. Device discovery metadata is not yet sufficient for write authorization. Add platform-specific system-disk, mount, read-only, parent/child and stable hardware identity resolution.
-3. File backup currently covers one regular file at a time; directory traversal, symlink policy, metadata preservation, cancellation, resume and manifest persistence remain future work.
-4. Hard-link publication is intentionally no-overwrite and same-filesystem; verify behavior on supported Windows filesystems and handle cleanup failures.
-5. A plan fingerprint is not a substitute for re-enumerating and validating the physical device immediately before execution.
-6. No physical storage device was accessed or modified during this work.
-
-## Validation status
-
-The added Rust tests are committed as source but have not been executed in this environment. Do not describe them as passing until CI or a local Rust toolchain confirms that result.
-
-
-## Follow-up hardening in continuity work
-
-- Device discovery no longer promotes sysfs topology paths or Windows PNP IDs to write-grade physical identities. Hardware serials are required; devices without one remain discoverable but must not pass destructive-operation preflight.
-- Shared identity comparison recognizes matching serials even when OS aliases or topology identifiers differ.
-- Backup publication cleanup is best-effort after the destination hard link is successfully published, avoiding a false failure state after a committed output.
-- Image manifests reject missing source identity, non-sector-aligned chunk geometry and chunks larger than the declared chunk size.
-- CI now runs a workspace compile check in addition to tests and Clippy. Formatting is normalized before validation because legacy repository Rust files were not uniformly rustfmt-formatted.
+- Do not test on a system disk or any disk containing data that matters.
+- Clone and restore destinations are overwritten.
+- Source disks are never selected as recovery output destinations.
+- Missing or mismatched hardware serials fail closed.
+- CI success is not a substitute for disposable-device and real-hardware validation.
