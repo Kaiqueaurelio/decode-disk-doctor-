@@ -20,6 +20,6 @@ Build the frontend with npm run build. Build native bundles with npm run tauri b
 
 ## Current functionality
 
-The first screen provides a user-triggered, read-only Linux block-device discovery command through sysfs. It does not read raw disk sectors, query SMART, write to disks, or perform repair. Windows discovery is not implemented yet and returns an explicit unsupported-platform error.
+The first screen provides a user-triggered, read-only Linux block-device discovery command through sysfs. It does not read raw disk sectors, query SMART, write to disks, or perform repair. Windows discovery uses a fixed PowerShell CIM inventory query; both platform providers still require real-hardware validation.
 
 Consult the root ROADMAP.md before treating planned modules as available.
