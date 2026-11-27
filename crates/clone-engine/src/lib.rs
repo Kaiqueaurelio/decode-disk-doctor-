@@ -1,12 +1,12 @@
 use safety_policy::{validate_block_clone,OperationPlan,PlanConfirmation};
 use sha2::{Digest,Sha256};
-use std::io::{self,Read,Write};
+use std::io::{self,Read,Seek,SeekFrom,Write};
 use thiserror::Error;
 #[derive(Debug,Clone,PartialEq,Eq)]pub struct CopyReport{pub bytes_copied:u64,pub sha256:String}
 #[derive(Debug,Error)]pub enum CloneError{
 #[error("Unsafe plan: {0}")]UnsafePlan(String),#[error("Confirmation mismatch: {0}")]Confirmation(String),
 #[error("Expected physical block devices.")]NotBlockDevices,#[error("Device is mounted or system-critical.")]MountedOrSystem,
-#[error("Same kernel device.")]SameDevice,#[error("Byte count is zero.")]Empty,
+#[error("Same kernel device.")]SameDevice,#[error("Byte count is zero.")]Empty,#[error("Requested length exceeds actual block-device capacity.")]CapacityMismatch,#[error("Destination read-back verification failed.")]VerificationFailed,
 #[error("I/O: {0}")]Io(#[from]io::Error),#[error("Linux only.")]Unsupported}
 pub fn copy_exact<R:Read,W:Write>(r:&mut R,w:&mut W,len:u64)->Result<CopyReport,CloneError>{
 if len==0{return Err(CloneError::Empty)}let mut b=vec![0;1024*1024];let mut left=len;let mut done=0;let mut h=Sha256::new();
@@ -18,7 +18,7 @@ pub fn clone_block_device(p:&OperationPlan,c:&PlanConfirmation)->Result<CopyRepo
 validate_block_clone(p).map_err(|e|CloneError::UnsafePlan(e.to_string()))?;
 c.validate_for(p).map_err(|e|CloneError::Confirmation(e.to_string()))?;
 if p.requested_bytes==0{return Err(CloneError::Empty)}
-#[cfg(target_os="linux")]{use std::{fs::{self,OpenOptions},os::unix::fs::FileTypeExt,path::Path};
+#[cfg(target_os="linux")]{use std::{fs::{self,OpenOptions},os::unix::fs::{FileTypeExt,MetadataExt},path::Path};
 let sp=Path::new(&p.source.path);let dp=Path::new(&p.destination.path);
 let sm=fs::metadata(sp)?;let dm=fs::metadata(dp)?;
 if !sm.file_type().is_block_device()||!dm.file_type().is_block_device(){return Err(CloneError::NotBlockDevices)}
