@@ -14,7 +14,7 @@ This roadmap describes intended work, not completed functionality. A feature is 
 ## Phase 1 — Read-only desktop MVP
 - [x] Tauri 2 desktop shell scaffold (Windows/Linux targets configured; runtime validation pending)
 - [x] React + TypeScript dashboard scaffold and Decode visual system
-- [x] Read-only Linux block-device discovery with sysfs identity (Windows provider pending)
+- [x] Read-only Linux sysfs and Windows CIM/PowerShell block-device discovery (real-hardware validation pending)
 - [x] Basic hardware inventory and device detail view
 - [x] smartmontools read-only SMART adapter (NVMe field mapping still requires device validation)
 - [x] Temperature field mapping in SMART response (device-specific validation pending)
