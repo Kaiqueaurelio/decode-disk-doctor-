@@ -117,8 +117,9 @@ let ip=Path::new(&p.destination_image_path);let mp=Path::new(&p.mapfile_path);
 let idir=ip.parent().filter(|x|!x.as_os_str().is_empty()).unwrap_or(Path::new("."));let mdir=mp.parent().filter(|x|!x.as_os_str().is_empty()).unwrap_or(Path::new("."));
 let im=std::fs::metadata(idir).map_err(|_|DdrescueExecutionError::InvalidDestination)?;let mm=std::fs::metadata(mdir).map_err(|_|DdrescueExecutionError::InvalidDestination)?;
 let dm=std::fs::metadata(&p.destination_device_path).map_err(|_|DdrescueExecutionError::InvalidDestination)?;
+verify_identity(sm.rdev(),p.source.stable_identity.as_deref().unwrap_or(""))?;
+verify_identity(dm.rdev(),&p.destination_storage_identity)?;
 if !dm.file_type().is_block_device()||!im.is_dir()||!mm.is_dir()||im.dev()!=mm.dev()
-verify_identity(sm.rdev(),p.source.stable_identity.as_deref().unwrap_or(""))?;verify_identity(dm.rdev(),&p.destination_storage_identity)?;
 ||same_physical_disk(im.dev(),sm.rdev()).map_err(|e|DdrescueExecutionError::Start(e.to_string()))?
 ||!same_physical_disk(im.dev(),dm.rdev()).map_err(|e|DdrescueExecutionError::Start(e.to_string()))?{
 return Err(DdrescueExecutionError::InvalidDestination)}
