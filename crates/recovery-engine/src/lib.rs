@@ -101,12 +101,12 @@ impl DdrescuePlan {
 
 
 #[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub struct DdrescueReport{pub exit_code:Option<i32>,pub image_path:String,pub mapfile_path:String}
+pub struct DdrescueReport{pub exit_code:Option<i32>,pub completed:bool,pub image_path:String,pub mapfile_path:String}
 #[derive(Debug,Error)]pub enum DdrescueExecutionError{
 #[error("Source is not a Linux block device.")]InvalidSource,
 #[error("Image and mapfile must be on one separate destination filesystem.")]InvalidDestination,
 #[error("Image and mapfile must both exist for resume or both be new.")]IncompleteResumePair,
-#[error("Could not start ddrescue: {0}")]Start(String),#[error("ddrescue failed with code {0:?}")]Failed(Option<i32>),#[error("Selected disk identity does not match current hardware serial.")]IdentityMismatch,
+#[error("Could not start ddrescue: {0}")]Start(String),#[error("Selected disk identity does not match current hardware serial.")]IdentityMismatch,
 #[error("Linux only.")]Unsupported}
 pub fn run_ddrescue_first_pass(p:&DdrescuePlan)->Result<DdrescueReport,DdrescueExecutionError>{
 let args=p.first_pass_args().map_err(|e|DdrescueExecutionError::Start(e.to_string()))?;
@@ -126,8 +126,7 @@ let ie=ip.exists();let me=mp.exists();if ie!=me{return Err(DdrescueExecutionErro
 if ie{let m=std::fs::symlink_metadata(ip).map_err(|_|DdrescueExecutionError::InvalidDestination)?;if !m.file_type().is_file()||m.file_type().is_symlink(){return Err(DdrescueExecutionError::InvalidDestination)}}
 else{std::fs::OpenOptions::new().write(true).create_new(true).open(ip).map_err(|e|DdrescueExecutionError::Start(e.to_string()))?;}
 let status=Command::new("ddrescue").args(&args).status().map_err(|e|DdrescueExecutionError::Start(e.to_string()))?;
-if !status.success(){return Err(DdrescueExecutionError::Failed(status.code()))}
-Ok(DdrescueReport{exit_code:status.code(),image_path:p.destination_image_path.clone(),mapfile_path:p.mapfile_path.clone()})}
+Ok(DdrescueReport{exit_code:status.code(),completed:status.success(),image_path:p.destination_image_path.clone(),mapfile_path:p.mapfile_path.clone()})}
 #[cfg(not(target_os="linux"))]{let _=(p,args);Err(DdrescueExecutionError::Unsupported)}}
 
 #[cfg(target_os="linux")]fn disk_root(raw:u64)->Result<std::path::PathBuf,std::io::Error>{let a=libc::major(raw as libc::dev_t)as u64;let b=libc::minor(raw as libc::dev_t)as u64;let p=std::fs::canonicalize(format!("/sys/dev/block/{a}:{b}"))?;if p.join("partition").exists(){Ok(p.parent().unwrap_or(&p).to_path_buf())}else{Ok(p)}}
