@@ -118,8 +118,9 @@ mod tests {
 
     #[test]
     fn validates_contiguous_manifest_and_hashes_stream() {
-        let bytes = b"chunk-data";
-        let digest = format!("{:x}", Sha256::digest(bytes));
+        // A valid image chunk must respect the declared 512-byte sector geometry.
+        let bytes = vec![b'x'; 512];
+        let digest = format!("{:x}", Sha256::digest(&bytes));
         let chunk = ImageChunk { index: 0, offset_bytes: 0, length_bytes: bytes.len() as u64, sha256: digest };
         let manifest = ImageManifest { format: "decode-disk-image".into(), schema_version: 1,
             source_identity: "fixture-device".into(), source_capacity_bytes: 1024,
