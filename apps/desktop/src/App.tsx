@@ -9,6 +9,21 @@ type Device = {
   capacity_bytes: number;
 };
 
+type Measurement<T> =
+  | { Measured: T }
+  | { Unsupported: { reason: string } }
+  | { Unavailable: { reason: string } };
+
+type SmartSnapshot = {
+  device: Device;
+  captured_at: string;
+  temperature_celsius: Measurement<number>;
+  power_on_hours: Measurement<number>;
+  reallocated_sector_count: Measurement<number>;
+  pending_sector_count: Measurement<number>;
+  overall_note: string;
+};
+
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "Capacidade indisponível";
   const units = ["B", "KB", "GB", "TB", "PB"];
@@ -21,15 +36,26 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[unit]}`;
 }
 
+function measurementLabel<T>(measurement: Measurement<T>, suffix = ""): string {
+  if ("Measured" in measurement) return `${measurement.Measured}${suffix}`;
+  if ("Unsupported" in measurement) return "Não suportado";
+  return "Indisponível";
+}
+
 export default function App() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [scanned, setScanned] = useState(false);
+  const [smartData, setSmartData] = useState<Record<string, SmartSnapshot>>({});
+  const [smartErrors, setSmartErrors] = useState<Record<string, string>>({});
+  const [smartLoading, setSmartLoading] = useState<string | null>(null);
 
   async function scanDevices() {
     setLoading(true);
     setError("");
+    setSmartData({});
+    setSmartErrors({});
     try {
       const found = await invoke<Device[]>("list_storage_devices");
       setDevices(found);
@@ -40,6 +66,19 @@ export default function App() {
       setScanned(true);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function inspectSmart(device: Device) {
+    setSmartLoading(device.device_path);
+    setSmartErrors((current) => ({ ...current, [device.device_path]: "" }));
+    try {
+      const result = await invoke<SmartSnapshot>("inspect_smart", { device });
+      setSmartData((current) => ({ ...current, [device.device_path]: result }));
+    } catch (cause) {
+      setSmartErrors((current) => ({ ...current, [device.device_path]: String(cause) }));
+    } finally {
+      setSmartLoading(null);
     }
   }
 
@@ -98,20 +137,37 @@ export default function App() {
         )}
         {devices.length > 0 && (
           <div className="device-grid">
-            {devices.map((device) => (
-              <article className="device-card" key={device.stable_id ?? device.device_path}>
-                <div className="device-card-top"><div className="drive-icon">▱</div><span className="tag">DETECTADO</span></div>
-                <h4>{device.model}</h4>
-                <div className="device-path">{device.device_path}</div>
-                <div className="device-meta"><span>CAPACIDADE</span><b>{formatBytes(device.capacity_bytes)}</b></div>
-                <div className="device-meta"><span>SERIAL</span><b>{device.serial || "Não informado"}</b></div>
-                <div className="device-footer"><span className="status-dot" /> Identificado · leitura somente</div>
-              </article>
-            ))}
+            {devices.map((device) => {
+              const smart = smartData[device.device_path];
+              return (
+                <article className="device-card" key={device.stable_id ?? device.device_path}>
+                  <div className="device-card-top"><div className="drive-icon">▱</div><span className="tag">DETECTADO</span></div>
+                  <h4>{device.model}</h4>
+                  <div className="device-path">{device.device_path}</div>
+                  <div className="device-meta"><span>CAPACIDADE</span><b>{formatBytes(device.capacity_bytes)}</b></div>
+                  <div className="device-meta"><span>SERIAL</span><b>{device.serial || "Não informado"}</b></div>
+                  <div className="device-footer"><span className="status-dot" /> Identificado · leitura somente</div>
+                  <button className="secondary" onClick={() => inspectSmart(device)} disabled={smartLoading === device.device_path}>
+                    {smartLoading === device.device_path ? "Consultando SMART..." : "Ler dados SMART"}
+                  </button>
+                  {smartErrors[device.device_path] && <div className="smart-error">{smartErrors[device.device_path]}</div>}
+                  {smart && (
+                    <div className="smart-panel">
+                      <strong>LEITURA SMART</strong>
+                      <div className="smart-row"><span>Temperatura</span><b>{measurementLabel(smart.temperature_celsius, " °C")}</b></div>
+                      <div className="smart-row"><span>Horas ligado</span><b>{measurementLabel(smart.power_on_hours, " h")}</b></div>
+                      <div className="smart-row"><span>Setores realocados</span><b>{measurementLabel(smart.reallocated_sector_count)}</b></div>
+                      <div className="smart-row"><span>Setores pendentes</span><b>{measurementLabel(smart.pending_sector_count)}</b></div>
+                      <p>{smart.overall_note}</p>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
           </div>
         )}
 
-        <section className="safety-note"><span className="shield">◇</span><div><strong>Proteção de dados em primeiro lugar</strong><p>Esta versão realiza apenas descoberta de hardware. Testes de superfície, clonagem, restauração e gravação ainda não estão habilitados.</p></div></section>
+        <section className="safety-note"><span className="shield">◇</span><div><strong>Proteção de dados em primeiro lugar</strong><p>Descoberta de hardware e leitura SMART são somente leitura. Testes de superfície, clonagem, restauração e gravação ainda não estão habilitados.</p></div></section>
         <footer>DECODE DISK DOCTOR <span>BUILD 0.1.0 · DECODE ANALYTICS © 2026</span></footer>
       </section>
     </main>
