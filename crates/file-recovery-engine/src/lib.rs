@@ -71,13 +71,15 @@ _=>return Err(PhotoRecExecutionError::InvalidSource)};
 let dm=std::fs::metadata(&p.destination.path).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;
 if !dm.file_type().is_block_device(){return Err(PhotoRecExecutionError::InvalidDestination)}
 let out=std::fs::metadata(&p.output_directory).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;
-if !out.is_dir()||out.dev()!=dm.rdev()||out.dev()==sd{return Err(PhotoRecExecutionError::InvalidDestination)}
+if !out.is_dir()||!same_physical_disk(out.dev(),dm.rdev())?||same_physical_disk(out.dev(),sd)?{return Err(PhotoRecExecutionError::InvalidDestination)}
 let args=photorec_args(p).map_err(|e|PhotoRecExecutionError::Start(e.to_string()))?;
 let status=Command::new("photorec").args(&args).status().map_err(|e|PhotoRecExecutionError::Start(e.to_string()))?;
 if !status.success(){return Err(PhotoRecExecutionError::Failed(status.code()))}
 Ok(PhotoRecReport{exit_code:status.code(),output_directory:p.output_directory.clone()})}
 #[cfg(not(target_os="linux"))]{let _=p;Err(PhotoRecExecutionError::Unsupported)}}
 
+#[cfg(target_os="linux")]fn disk_root(raw:u64)->Result<std::path::PathBuf,PhotoRecExecutionError>{let a=libc::major(raw as libc::dev_t)as u64;let b=libc::minor(raw as libc::dev_t)as u64;let p=std::fs::canonicalize(format!("/sys/dev/block/{a}:{b}")).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;if p.join("partition").exists(){Ok(p.parent().unwrap_or(&p).to_path_buf())}else{Ok(p)}}
+#[cfg(target_os="linux")]fn same_physical_disk(a:u64,b:u64)->Result<bool,PhotoRecExecutionError>{Ok(disk_root(a)?==disk_root(b)?)}
 #[cfg(test)]
 mod tests {
     use super::*;

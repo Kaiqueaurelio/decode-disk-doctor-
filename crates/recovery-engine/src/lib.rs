@@ -48,6 +48,7 @@ pub struct DdrescuePlan {
     pub source: StorageEndpoint,
     pub destination_image_path: String,
     pub destination_storage_identity: String,
+    pub destination_device_path: String,
     pub mapfile_path: String,
 }
 
@@ -115,7 +116,11 @@ if !sm.file_type().is_block_device(){return Err(DdrescueExecutionError::InvalidS
 let ip=Path::new(&p.destination_image_path);let mp=Path::new(&p.mapfile_path);
 let idir=ip.parent().filter(|x|!x.as_os_str().is_empty()).unwrap_or(Path::new("."));let mdir=mp.parent().filter(|x|!x.as_os_str().is_empty()).unwrap_or(Path::new("."));
 let im=std::fs::metadata(idir).map_err(|_|DdrescueExecutionError::InvalidDestination)?;let mm=std::fs::metadata(mdir).map_err(|_|DdrescueExecutionError::InvalidDestination)?;
-if !im.is_dir()||!mm.is_dir()||im.dev()!=mm.dev()||im.dev()==sm.rdev(){return Err(DdrescueExecutionError::InvalidDestination)}
+let dm=std::fs::metadata(&p.destination_device_path).map_err(|_|DdrescueExecutionError::InvalidDestination)?;
+if !dm.file_type().is_block_device()||!im.is_dir()||!mm.is_dir()||im.dev()!=mm.dev()
+||same_physical_disk(im.dev(),sm.rdev()).map_err(|e|DdrescueExecutionError::Start(e.to_string()))?
+||!same_physical_disk(im.dev(),dm.rdev()).map_err(|e|DdrescueExecutionError::Start(e.to_string()))?{
+return Err(DdrescueExecutionError::InvalidDestination)}
 let ie=ip.exists();let me=mp.exists();if ie!=me{return Err(DdrescueExecutionError::IncompleteResumePair)}
 if ie{let m=std::fs::symlink_metadata(ip).map_err(|_|DdrescueExecutionError::InvalidDestination)?;if !m.file_type().is_file()||m.file_type().is_symlink(){return Err(DdrescueExecutionError::InvalidDestination)}}
 else{std::fs::OpenOptions::new().write(true).create_new(true).open(ip).map_err(|e|DdrescueExecutionError::Start(e.to_string()))?;}
@@ -124,6 +129,8 @@ if !status.success(){return Err(DdrescueExecutionError::Failed(status.code()))}
 Ok(DdrescueReport{exit_code:status.code(),image_path:p.destination_image_path.clone(),mapfile_path:p.mapfile_path.clone()})}
 #[cfg(not(target_os="linux"))]{let _=(p,args);Err(DdrescueExecutionError::Unsupported)}}
 
+#[cfg(target_os="linux")]fn disk_root(raw:u64)->Result<std::path::PathBuf,std::io::Error>{let a=libc::major(raw as libc::dev_t)as u64;let b=libc::minor(raw as libc::dev_t)as u64;let p=std::fs::canonicalize(format!("/sys/dev/block/{a}:{b}"))?;if p.join("partition").exists(){Ok(p.parent().unwrap_or(&p).to_path_buf())}else{Ok(p)}}
+#[cfg(target_os="linux")]fn same_physical_disk(a:u64,b:u64)->Result<bool,std::io::Error>{Ok(disk_root(a)?==disk_root(b)?)}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,7 +145,7 @@ mod tests {
     fn creates_conservative_ddrescue_argv_without_execution() {
         let plan = DdrescuePlan { source: source(),
             destination_image_path: "/mnt/recovery/disk.img".into(),
-            destination_storage_identity: "wwn:destination".into(),
+            destination_storage_identity: "wwn:destination".into(), destination_device_path: "/dev/sdy".into(),
             mapfile_path: "/mnt/recovery/disk.map".into() };
         let args = plan.first_pass_args().unwrap();
         assert_eq!(args, vec!["--no-scrape", "/dev/sdz", "/mnt/recovery/disk.img", "/mnt/recovery/disk.map"]);
@@ -148,7 +155,7 @@ mod tests {
     fn rejects_same_physical_destination() {
         let plan = DdrescuePlan { source: source(),
             destination_image_path: "/mnt/recovery/disk.img".into(),
-            destination_storage_identity: "wwn:source".into(),
+            destination_storage_identity: "wwn:source".into(), destination_device_path: "/dev/sdz".into(),
             mapfile_path: "/mnt/recovery/disk.map".into() };
         assert_eq!(plan.first_pass_args(), Err(DdrescuePlanError::DestinationMustBeSeparate));
     }
@@ -157,7 +164,7 @@ mod tests {
     fn rejects_relative_paths() {
         let plan = DdrescuePlan { source: source(),
             destination_image_path: "disk.img".into(),
-            destination_storage_identity: "wwn:destination".into(),
+            destination_storage_identity: "wwn:destination".into(), destination_device_path: "/dev/sdy".into(),
             mapfile_path: "/mnt/recovery/disk.map".into() };
         assert_eq!(plan.first_pass_args(), Err(DdrescuePlanError::PathsMustBeAbsolute));
     }

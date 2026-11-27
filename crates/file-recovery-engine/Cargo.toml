@@ -8,3 +8,4 @@ license.workspace = true
 safety-policy = { path = "../safety-policy" }
 thiserror.workspace = true
 serde.workspace = true
+libc.workspace = true

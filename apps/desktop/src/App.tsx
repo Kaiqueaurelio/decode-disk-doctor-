@@ -141,13 +141,13 @@ export default function App() {
   async function createImage() {
     const source = devices.find((d) => d.device_path === imageSource);
     const target = devices.find((d) => d.device_path === imageTarget);
-    if (!source || !target || !target.stable_id || !imagePath.trim()) {
+    if (!source || !target || !imagePath.trim()) {
       setOperationMessage("Selecione origem, destino, e informe o caminho completo do arquivo de imagem."); return;
     }
     try {
       setOperationBusy(true); setOperationMessage("Criando imagem raw. A operação pode levar bastante tempo.");
       const result = await invoke<{ bytes_processed: number; sha256: string }>("create_disk_image", {
-        source: endpoint(source), imagePath, destinationStorageIdentity: target.stable_id,
+        source: endpoint(source), destination: endpoint(target), imagePath,
         capacityBytes: source.capacity_bytes
       });
       setOperationMessage(`Imagem criada: ${formatBytes(result.bytes_processed)} · SHA-256 ${result.sha256}`);
