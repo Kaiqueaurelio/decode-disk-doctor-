@@ -99,6 +99,103 @@ export default function App() {
     }
   }
 
+
+  function endpoint(device: Device, kind: StorageEndpoint["kind"] = "BlockDevice", path = device.device_path): StorageEndpoint {
+    return { kind, path, stable_identity: device.stable_id, capacity_bytes: device.capacity_bytes,
+      is_system: false, is_mounted: false, is_read_only: false };
+  }
+
+  async function prepareClone() {
+    const source = devices.find((d) => d.device_path === cloneSource);
+    const target = devices.find((d) => d.device_path === cloneTarget);
+    if (!source || !target) { setOperationMessage("Selecione os discos de origem e destino."); return; }
+    try {
+      setOperationBusy(true); setOperationMessage("");
+      const phrase = await invoke<string>("operation_confirmation_phrase", {
+        kind: "BlockClone", source: endpoint(source), destination: endpoint(target), requestedBytes: source.capacity_bytes
+      });
+      setClonePhrase(phrase); setClonePhraseInput("");
+      setOperationMessage("Pré-validação concluída. Confira os discos e digite a frase exata para autorizar a clonagem.");
+    } catch (cause) { setOperationMessage(String(cause)); }
+    finally { setOperationBusy(false); }
+  }
+
+  async function executeClone() {
+    const source = devices.find((d) => d.device_path === cloneSource);
+    const target = devices.find((d) => d.device_path === cloneTarget);
+    if (!source || !target || !clonePhrase || clonePhraseInput !== clonePhrase) {
+      setOperationMessage("A confirmação não corresponde à operação preparada."); return;
+    }
+    try {
+      setOperationBusy(true); setOperationMessage("Clonagem em andamento. Não desconecte os discos.");
+      const result = await invoke<{ bytes_copied: number; sha256: string }>("clone_physical_disk", {
+        source: endpoint(source), destination: endpoint(target), requestedBytes: source.capacity_bytes,
+        confirmationPhrase: clonePhraseInput
+      });
+      setOperationMessage(`Clonagem concluída: ${formatBytes(result.bytes_copied)} · SHA-256 ${result.sha256}`);
+      setClonePhrase(""); setClonePhraseInput("");
+    } catch (cause) { setOperationMessage(`A clonagem não foi concluída: ${String(cause)}`); }
+    finally { setOperationBusy(false); }
+  }
+
+  async function createImage() {
+    const source = devices.find((d) => d.device_path === imageSource);
+    const target = devices.find((d) => d.device_path === imageTarget);
+    if (!source || !target || !target.stable_id || !imagePath.trim()) {
+      setOperationMessage("Selecione origem, destino, e informe o caminho completo do arquivo de imagem."); return;
+    }
+    try {
+      setOperationBusy(true); setOperationMessage("Criando imagem raw. A operação pode levar bastante tempo.");
+      const result = await invoke<{ bytes_processed: number; sha256: string }>("create_disk_image", {
+        source: endpoint(source), imagePath, destinationStorageIdentity: target.stable_id,
+        capacityBytes: source.capacity_bytes
+      });
+      setOperationMessage(`Imagem criada: ${formatBytes(result.bytes_processed)} · SHA-256 ${result.sha256}`);
+    } catch (cause) { setOperationMessage(`Falha ao criar imagem: ${String(cause)}`); }
+    finally { setOperationBusy(false); }
+  }
+
+  async function prepareRestore() {
+    const sourceDisk = devices.find((d) => d.device_path === restoreSourceDisk);
+    const targetDisk = devices.find((d) => d.device_path === restoreTargetDisk);
+    const bytes = Number(restoreImageBytes);
+    if (!sourceDisk?.stable_id || !targetDisk || !restoreImagePath.trim() || !Number.isSafeInteger(bytes) || bytes <= 0) {
+      setOperationMessage("Informe o disco onde está a imagem, o destino, o caminho e o tamanho em bytes."); return;
+    }
+    const imageEndpoint: StorageEndpoint = { kind: "ImageFile", path: restoreImagePath, stable_identity: sourceDisk.stable_id,
+      capacity_bytes: bytes, is_system: false, is_mounted: false, is_read_only: true };
+    try {
+      setOperationBusy(true); setOperationMessage("");
+      const phrase = await invoke<string>("operation_confirmation_phrase", {
+        kind: "Restore", source: imageEndpoint, destination: endpoint(targetDisk), requestedBytes: bytes
+      });
+      setRestorePhrase(phrase); setRestorePhraseInput("");
+      setOperationMessage("Pré-validação concluída. Restaurar apagará os dados do disco de destino. Digite a frase exata para continuar.");
+    } catch (cause) { setOperationMessage(String(cause)); }
+    finally { setOperationBusy(false); }
+  }
+
+  async function executeRestore() {
+    const sourceDisk = devices.find((d) => d.device_path === restoreSourceDisk);
+    const targetDisk = devices.find((d) => d.device_path === restoreTargetDisk);
+    const bytes = Number(restoreImageBytes);
+    if (!sourceDisk?.stable_id || !targetDisk || !restorePhrase || restorePhraseInput !== restorePhrase) {
+      setOperationMessage("A confirmação não corresponde à restauração preparada."); return;
+    }
+    const imageEndpoint: StorageEndpoint = { kind: "ImageFile", path: restoreImagePath, stable_identity: sourceDisk.stable_id,
+      capacity_bytes: bytes, is_system: false, is_mounted: false, is_read_only: true };
+    try {
+      setOperationBusy(true); setOperationMessage("Restauração em andamento. O disco de destino será sobrescrito.");
+      const result = await invoke<{ bytes_processed: number; sha256: string }>("restore_disk_image", {
+        imageSource: imageEndpoint, destination: endpoint(targetDisk), imagePath: restoreImagePath,
+        imageBytes: bytes, confirmationPhrase: restorePhraseInput
+      });
+      setOperationMessage(`Restauração concluída: ${formatBytes(result.bytes_processed)} · SHA-256 ${result.sha256}`);
+      setRestorePhrase(""); setRestorePhraseInput("");
+    } catch (cause) { setOperationMessage(`Restauração não concluída: ${String(cause)}`); }
+    finally { setOperationBusy(false); }
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar">
