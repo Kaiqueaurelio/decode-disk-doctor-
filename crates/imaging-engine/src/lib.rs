@@ -6,7 +6,7 @@ use sha2::{Digest,Sha256};use std::{fs::{self,File,OpenOptions},io::{self,Read,S
 #[error("Invalid plan: {0}")]Plan(String),#[error("Confirmation: {0}")]Confirmation(String),#[error("Wrong endpoint type.")]WrongType,
 #[error("Image and target share a physical device.")]SameDevice,#[error("Target is mounted/system-critical.")]UnsafeTarget,
 #[error("Invalid image size or actual disk capacity mismatch.")]InvalidSize,
-#[error("Destination read-back verification failed.")]VerificationFailed,#[error("The current device serial does not match the selected device identity.")]IdentityMismatch,#[error("I/O: {0}")]Io(#[from]io::Error),#[error("Linux only.")]Unsupported}
+#[error("Destination read-back verification failed.")]VerificationFailed,#[error("Insufficient free space for a full raw image.")]InsufficientSpace,#[error("The current device serial does not match the selected device identity.")]IdentityMismatch,#[error("I/O: {0}")]Io(#[from]io::Error),#[error("Linux only.")]Unsupported}
 fn stream<R:Read,W:Write>(r:&mut R,w:&mut W,len:u64)->Result<ImageReport,ImagingError>{if len==0{return Err(ImagingError::InvalidSize)}
 let mut b=vec![0;1024*1024];let mut left=len;let mut done=0;let mut h=Sha256::new();while left>0{let m=usize::try_from(left.min(b.len()as u64)).unwrap_or(b.len());let n=r.read(&mut b[..m])?;
 if n==0{return Err(ImagingError::Io(io::Error::new(io::ErrorKind::UnexpectedEof,"short source")))}w.write_all(&b[..n])?;h.update(&b[..n]);done+=n as u64;left-=n as u64;}w.flush()?;Ok(ImageReport{bytes_processed:done,sha256:format!("{:x}",h.finalize())})}
@@ -24,6 +24,7 @@ let parent=path.parent().filter(|p|!p.as_os_str().is_empty()).unwrap_or(Path::ne
 if same_physical_disk(sm.rdev(),dm.rdev())?{return Err(ImagingError::SameDevice)}
 if !same_physical_disk(pm.dev(),dm.rdev())?{return Err(ImagingError::Plan("Image path is not on the selected destination disk.".into()))}
 let mut src=File::open(&s.path)?;let actual=block_capacity(&src)?;if n!=actual{return Err(ImagingError::InvalidSize)}
+if available_bytes(parent)?<actual{return Err(ImagingError::InsufficientSpace)}
 let mut dst=OpenOptions::new().write(true).create_new(true).open(path)?;let report=stream(&mut src,&mut dst,actual)?;dst.sync_all()?;
 let mut verify=File::open(path)?;let checked=stream(&mut verify,&mut io::sink(),actual)?;if checked.sha256!=report.sha256{return Err(ImagingError::VerificationFailed)}Ok(report)}
 #[cfg(not(target_os="linux"))]{let _=(s,path,destination,n);Err(ImagingError::Unsupported)}}
@@ -39,6 +40,7 @@ if im.len()>block_capacity(&dst)?{return Err(ImagingError::InvalidSize)}
 let report=stream(&mut src,&mut dst,im.len())?;dst.sync_all()?;dst.seek(SeekFrom::Start(0))?;
 let verified=stream(&mut dst,&mut io::sink(),im.len())?;if report.sha256!=verified.sha256{return Err(ImagingError::VerificationFailed)}Ok(report)}
 #[cfg(not(target_os="linux"))]{let _=(p,c,path);Err(ImagingError::Unsupported)}}
+#[cfg(target_os="linux")]fn available_bytes(path:&Path)->Result<u64,ImagingError>{use std::{ffi::CString,os::unix::ffi::OsStrExt,mem::MaybeUninit};let p=CString::new(path.as_os_str().as_bytes()).map_err(|e|ImagingError::Plan(e.to_string()))?;let mut stats=MaybeUninit::<libc::statvfs>::zeroed();let rc=unsafe{libc::statvfs(p.as_ptr(),stats.as_mut_ptr())};if rc!=0{return Err(ImagingError::Io(io::Error::last_os_error()))}let s=unsafe{stats.assume_init()};Ok((s.f_bavail as u64).saturating_mul(s.f_frsize as u64))}
 #[cfg(target_os="linux")]fn block_capacity(f:&File)->Result<u64,ImagingError>{use std::os::unix::io::AsRawFd;let mut n=0u64;let rc=unsafe{libc::ioctl(f.as_raw_fd(),0x80081272 as libc::c_ulong,&mut n)};if rc<0{return Err(ImagingError::Io(io::Error::last_os_error()))}Ok(n)}
 #[cfg(target_os="linux")]fn sysfs_disk_root(raw:u64)->Result<std::path::PathBuf,ImagingError>{
 let d=(libc::major(raw as libc::dev_t)as u64,libc::minor(raw as libc::dev_t)as u64);
