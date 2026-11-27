@@ -59,8 +59,9 @@ fn discover_linux(root: &Path) -> Result<Vec<DeviceIdentity>, DiscoveryError> {
         let vendor = read_trimmed(base.join("device/vendor").as_path()).unwrap_or_default();
         let serial = read_trimmed(base.join("device/serial").as_path());
         let removable = read_trimmed(base.join("removable").as_path()).as_deref() == Some("1");
-        let sysfs_canonical = fs::canonicalize(&base).unwrap_or(base.clone());
-        let stable_id = Some(format!("sysfs:{}", sysfs_canonical.display()));
+        // sysfs canonical paths describe topology, not the physical drive identity.
+        // Only expose a stable identifier when hardware provides a serial number.
+        let stable_id = serial.as_ref().map(|value| format!("serial:{vendor}:{value}"));
 
         let display_model = if vendor.is_empty() {
             model
@@ -105,6 +106,7 @@ fn discover_windows() -> Result<Vec<DeviceIdentity>, DiscoveryError> {
     parse_windows_inventory(&String::from_utf8_lossy(&output.stdout))
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn parse_windows_inventory(raw: &str) -> Result<Vec<DeviceIdentity>, DiscoveryError> {
     use serde_json::Value;
 
@@ -133,9 +135,9 @@ fn parse_windows_inventory(raw: &str) -> Result<Vec<DeviceIdentity>, DiscoveryEr
 
         let model = row.get("Model").and_then(Value::as_str).unwrap_or("Unknown disk").trim().to_string();
         let serial = row.get("SerialNumber").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
-        let pnp = row.get("PNPDeviceID").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
-        let stable_id = pnp.map(|id| format!("pnp:{id}"))
-            .or_else(|| serial.as_ref().map(|id| format!("serial:{id}")));
+        // PNP IDs describe enumeration/topology and may survive device replacement.
+        // Require a hardware serial for a write-grade stable identifier.
+        let stable_id = serial.as_ref().map(|id| format!("serial:{model}:{id}"));
 
         devices.push(DeviceIdentity {
             device_path: device_path.to_string(),
@@ -162,27 +164,33 @@ mod tests {
         let root = std::env::temp_dir().join(format!("decode-sysfs-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("sda/device")).unwrap();
+        fs::create_dir_all(root.join("sdb/device")).unwrap();
         fs::create_dir_all(root.join("loop0")).unwrap();
         fs::write(root.join("sda/size"), "2048").unwrap();
         fs::write(root.join("sda/device/model"), "Fixture Disk").unwrap();
         fs::write(root.join("sda/device/serial"), "FIXTURE-01").unwrap();
+        fs::write(root.join("sdb/size"), "4096").unwrap();
         fs::write(root.join("loop0/size"), "2048").unwrap();
 
         let result = discover_linux(&root).unwrap();
-        assert_eq!(result.len(), 1);
+        assert_eq!(result.len(), 2);
         assert_eq!(result[0].device_path, "/dev/sda");
         assert_eq!(result[0].capacity_bytes, 1_048_576);
         assert_eq!(result[0].serial.as_deref(), Some("FIXTURE-01"));
+        assert_eq!(result[0].stable_id.as_deref(), Some("serial::FIXTURE-01"));
+        assert_eq!(result[1].device_path, "/dev/sdb");
+        assert!(result[1].stable_id.is_none(), "topology alone must not become a hardware identity");
 
         fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn parses_windows_disk_inventory_without_device_access() {
-        let raw = r#"[{"DeviceID":"\\.\PHYSICALDRIVE0","Model":"Example SSD","SerialNumber":"SER-01","Size":"1000000000","PNPDeviceID":"SCSI\\DISK&VEN_EXAMPLE"}]"#;
+        let raw = r#"[{"DeviceID":"\\\\.\\PHYSICALDRIVE0","Model":"Example SSD","SerialNumber":"SER-01","Size":"1000000000","PNPDeviceID":"SCSI\\\\DISK&VEN_EXAMPLE"}]"#;
         let result = parse_windows_inventory(raw).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].capacity_bytes, 1_000_000_000);
         assert_eq!(result[0].serial.as_deref(), Some("SER-01"));
+        assert_eq!(result[0].stable_id.as_deref(), Some("serial:Example SSD:SER-01"));
     }
 }

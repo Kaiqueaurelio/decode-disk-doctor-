@@ -26,6 +26,7 @@
   },
   "bundle": {
     "active": true,
+    "icon": ["icons/icon.png"],
     "targets": ["app", "deb", "rpm", "nsis", "msi"],
     "category": "Utility",
     "shortDescription": "Disk diagnostics and recovery toolkit",

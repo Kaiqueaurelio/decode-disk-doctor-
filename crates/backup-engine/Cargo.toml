@@ -9,3 +9,4 @@ decode-core = { path = "../decode-core" }
 serde.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
+sha2.workspace = true

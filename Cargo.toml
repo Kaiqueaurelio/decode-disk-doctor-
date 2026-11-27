@@ -10,11 +10,14 @@ members = [
   "crates/clone-engine",
   "crates/recovery-engine",
   "crates/report-engine",
+  "crates/safety-policy",
+  "crates/image-format",
+  "crates/file-recovery-engine",
   "apps/desktop/src-tauri",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "LicenseRef-Decode-Proprietary"
 repository = "https://github.com/Kaiqueaurelio/decode-disk-doctor-"
@@ -25,3 +28,5 @@ thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 time = { version = "0.3", features = ["serde", "formatting"] }
 serde_json = "1"
+sha2 = "0.10"
+libc = "0.2"

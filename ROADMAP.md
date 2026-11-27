@@ -7,36 +7,39 @@ This roadmap describes intended work, not completed functionality. A feature is 
 - [x] Define target monorepo architecture
 - [x] Add proprietary license notice for original code
 - [x] Add third-party compliance register
-- [x] Add CI workflow for formatting, linting, core tests and frontend build (first run not yet verified)
+- [x] Add CI workflow for Rust core checks and frontend compilation (branch CI still needs execution)
 - [x] Add local development and setup guide
-- [x] Add initial threat model (release checklist pending)
+- [x] Add initial threat model
+- [x] Add centralized safety preflight and exact-plan confirmation contracts
+- [x] Add image manifest v1 validation and streaming chunk hash verification
+- [x] Add single-file streaming backup primitive with no-overwrite publication
 
 ## Phase 1 — Read-only desktop MVP
-- [x] Tauri 2 desktop shell scaffold (Windows/Linux targets configured; runtime validation pending)
+- [x] Tauri 2 desktop shell scaffold
 - [x] React + TypeScript dashboard scaffold and Decode visual system
-- [x] Read-only Linux sysfs and Windows CIM/PowerShell block-device discovery (real-hardware validation pending)
+- [x] Read-only Linux sysfs and Windows CIM/PowerShell block-device discovery (hardware validation pending)
 - [x] Basic hardware inventory and device detail view
-- [x] smartmontools read-only SMART adapter (NVMe field mapping still requires device validation)
-- [x] Temperature field mapping in SMART response (device-specific validation pending)
+- [x] smartmontools read-only SMART adapter (supervision and hardware mapping pending)
 - [ ] SQLite history and structured operation logs
 - [ ] Exportable diagnostic report
-- [x] Initial fixture-based and safety contract unit tests
+- [x] Initial fixture-based and safety contract unit tests (execution pending)
 
 ## Phase 2 — Diagnostics
 - [ ] Surface scan with explicit read-only mode
-- [ ] Controlled benchmark on user-selected devices
-- [ ] Health/risk explanation based on measured signals
-- [ ] Drive failure warning and ddrescue-first workflow
+- [ ] Controlled read-only benchmark
+- [ ] Explainable health/risk findings based only on measured signals
+- [ ] Drive-failure warning and ddrescue-first workflow
 - [ ] Technician/customer/equipment records
 
-## Phase 3 — Imaging, backup and cloning
-- [ ] Image format and manifest specification
-- [ ] Imaging with progress, resume and verification
-- [ ] Backup job model and retention policy
+## Phase 3 — Backup, imaging and cloning
+- [x] Single regular-file streaming backup primitive
+- [ ] Directory backup, metadata policy, exclusions and manifests
+- [ ] Backup verification and persistent job state
 - [ ] Incremental/differential strategy based on supported snapshot/change tracking
-- [ ] Clone planning and source/destination confirmation
+- [x] Image manifest schema v1 and chunk verification
+- [ ] Raw disk/partition acquisition with progress, resume and verification
+- [ ] Clone planning and destination revalidation
 - [ ] Restore workflow with destructive-operation safeguards
-- [ ] Recovery from interrupted jobs
 
 ## Phase 4 — Recovery environment
 - [ ] Reproducible Ubuntu Live build

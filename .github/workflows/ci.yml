@@ -21,6 +21,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Format Rust sources
         run: cargo fmt --all
+      - name: Install Tauri Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev
+      - name: Check Rust workspace
+        run: cargo check --workspace --exclude decode-disk-doctor-app
+      - name: Check Tauri desktop backend
+        run: cargo check -p decode-disk-doctor-app
       - name: Run core tests
         run: cargo test --workspace --exclude decode-disk-doctor-app
       - name: Run Clippy

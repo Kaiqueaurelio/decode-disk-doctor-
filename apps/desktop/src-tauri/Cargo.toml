@@ -17,3 +17,8 @@ decode-core = { path = "../../../crates/decode-core" }
 device-discovery = { path = "../../../crates/device-discovery" }
 diagnostic-engine = { path = "../../../crates/diagnostic-engine" }
 smart-engine = { path = "../../../crates/smart-engine" }
+recovery-engine = { path = "../../../crates/recovery-engine" }
+clone-engine = { path = "../../../crates/clone-engine" }
+imaging-engine = { path = "../../../crates/imaging-engine" }
+safety-policy = { path = "../../../crates/safety-policy" }
+file-recovery-engine = { path = "../../../crates/file-recovery-engine" }

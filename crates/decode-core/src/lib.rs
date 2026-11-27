@@ -17,16 +17,33 @@ pub struct DeviceIdentity {
 impl DeviceIdentity {
     /// Conservative equality check used before writes.
     pub fn identifies_same_device(&self, other: &Self) -> bool {
-        if let (Some(a), Some(b)) = (&self.stable_id, &other.stable_id) {
-            if !a.is_empty() && !b.is_empty() {
-                return a == b;
+        let left_serial = self.serial.as_deref().map(str::trim).filter(|value| !value.is_empty());
+        let right_serial = other.serial.as_deref().map(str::trim).filter(|value| !value.is_empty());
+
+        // Matching hardware serials take precedence over OS paths and topology IDs:
+        // the same physical disk may be exposed through different device aliases.
+        if let (Some(left), Some(right)) = (left_serial, right_serial) {
+            if left == right {
+                return true;
             }
         }
-        if let (Some(a), Some(b)) = (&self.serial, &other.serial) {
-            if !a.is_empty() && !b.is_empty() {
-                return a == b;
+
+        if let (Some(left), Some(right)) = (
+            self.stable_id.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+            other.stable_id.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+        ) {
+            if left == right {
+                return true;
             }
         }
+
+        // A conflicting pair of serials is evidence that these are different devices.
+        if left_serial.is_some() && right_serial.is_some() {
+            return false;
+        }
+
+        // Path equality is only a conservative fallback when stronger identifiers
+        // are unavailable; callers must still require a verified identity for writes.
         self.device_path == other.device_path
     }
 }
@@ -110,6 +127,24 @@ mod tests {
             model: "Test Disk".into(),
             capacity_bytes: capacity,
         }
+    }
+
+    #[test]
+    fn recognizes_same_physical_disk_through_different_topology_ids() {
+        let mut source = disk("/dev/sda", "SERIAL-123", 1_000);
+        let mut destination = disk("/dev/disk/by-id/ata-example", "SERIAL-123", 1_000);
+        source.stable_id = Some("sysfs:/pci/slot-a".into());
+        destination.stable_id = Some("sysfs:/pci/slot-b".into());
+        assert!(source.identifies_same_device(&destination));
+    }
+
+    #[test]
+    fn does_not_treat_different_serials_as_same_disk_only_by_path_alias() {
+        let mut source = disk("/dev/sda", "SERIAL-A", 1_000);
+        let mut destination = disk("/dev/sda", "SERIAL-B", 1_000);
+        source.stable_id = None;
+        destination.stable_id = None;
+        assert!(!source.identifies_same_device(&destination));
     }
 
     #[test]
