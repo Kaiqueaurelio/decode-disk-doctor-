@@ -55,13 +55,13 @@ impl FileRecoveryPlan {
 
 
 #[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub struct PhotoRecReport{pub exit_code:Option<i32>,pub output_directory:String}
+pub struct PhotoRecReport{pub exit_code:Option<i32>,pub completed:bool,pub output_directory:String}
 #[derive(Debug,Error)]pub enum PhotoRecExecutionError{
 #[error("Source must be a block device or regular image file.")]InvalidSource,
 #[error("Output folder must be on the selected separate destination device.")]InvalidDestination,
-#[error("Could not start PhotoRec: {0}")]Start(String),#[error("PhotoRec failed with code {0:?}")]Failed(Option<i32>),#[error("Selected disk identity does not match current hardware serial.")]IdentityMismatch,
+#[error("Could not start PhotoRec: {0}")]Start(String),#[error("Selected disk identity does not match current hardware serial.")]IdentityMismatch,
 #[error("Linux only.")]Unsupported}
-pub fn photorec_args(p:&FileRecoveryPlan)->Result<Vec<String>,FileRecoveryError>{p.validate_photorec()?;Ok(vec!["/log".into(),"/d".into(),p.output_directory.clone(),p.source.path.clone()])}
+pub fn photorec_args(p:&FileRecoveryPlan)->Result<Vec<String>,FileRecoveryError>{p.validate_photorec()?;Ok(vec!["/log".into(),"/d".into(),p.output_directory.clone(),"/cmd".into(),p.source.path.clone(),"select,search".into()])}
 pub fn recover_with_photorec(p:&FileRecoveryPlan)->Result<PhotoRecReport,PhotoRecExecutionError>{
 #[cfg(target_os="linux")]{use std::os::unix::fs::{FileTypeExt,MetadataExt};
 let sm=std::fs::metadata(&p.source.path).map_err(|_|PhotoRecExecutionError::InvalidSource)?;
@@ -80,8 +80,7 @@ let out=std::fs::metadata(requested).map_err(|_|PhotoRecExecutionError::InvalidD
 if !out.is_dir()||!same_physical_disk(out.dev(),dm.rdev())?||same_physical_disk(out.dev(),sd)?{return Err(PhotoRecExecutionError::InvalidDestination)}
 let args=photorec_args(p).map_err(|e|PhotoRecExecutionError::Start(e.to_string()))?;
 let status=Command::new("photorec").args(&args).status().map_err(|e|PhotoRecExecutionError::Start(e.to_string()))?;
-if !status.success(){return Err(PhotoRecExecutionError::Failed(status.code()))}
-Ok(PhotoRecReport{exit_code:status.code(),output_directory:p.output_directory.clone()})}
+Ok(PhotoRecReport{exit_code:status.code(),completed:status.success(),output_directory:p.output_directory.clone()})}
 #[cfg(not(target_os="linux"))]{let _=p;Err(PhotoRecExecutionError::Unsupported)}}
 
 #[cfg(target_os="linux")]fn disk_root(raw:u64)->Result<std::path::PathBuf,PhotoRecExecutionError>{let a=libc::major(raw as libc::dev_t)as u64;let b=libc::minor(raw as libc::dev_t)as u64;let p=std::fs::canonicalize(format!("/sys/dev/block/{a}:{b}")).map_err(|_|PhotoRecExecutionError::InvalidDestination)?;if p.join("partition").exists(){Ok(p.parent().unwrap_or(&p).to_path_buf())}else{Ok(p)}}
@@ -104,7 +103,7 @@ mod tests {
             output_directory: "/mnt/recovery/files".into() };
         assert!(plan.validate_photorec().is_ok());
         assert!(plan.validate_testdisk_analysis(false).is_ok());
-        assert_eq!(photorec_args(&plan).unwrap(), vec!["/log", "/d", "/mnt/recovery/files", "/dev/source"]);
+        assert_eq!(photorec_args(&plan).unwrap(), vec!["/log", "/d", "/mnt/recovery/files", "/cmd", "/dev/source", "select,search"]);
     }
 
     #[test]

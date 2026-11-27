@@ -60,7 +60,7 @@ The backend rechecks the physical serial against the discovered stable identity,
 - Choose a source disk and a different destination disk.
 - The output directory is created on the selected destination filesystem after physical-disk verification.
 - Recovered files are never written to the source.
-- The current desktop workflow runs PhotoRec synchronously and does not yet expose live progress or cancellation.
+- The desktop launches PhotoRec in its scripted, non-interactive command mode. It currently selects the default partition and starts a search; live progress and cancellation are not yet exposed.
 
 ## Known limitations
 

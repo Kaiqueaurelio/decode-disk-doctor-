@@ -268,11 +268,11 @@ export default function App() {
         setOperationMessage(`ddrescue ${result.completed ? "concluído" : "interrompido com dados parciais"} (código ${result.exit_code}). Imagem: ${result.image_path} · Mapfile: ${result.mapfile_path}`);
       } else {
         setOperationMessage("PhotoRec em execução. Não desconecte os dispositivos.");
-        const result = await invoke<{ exit_code: number | null; output_directory: string }>("recover_files_photorec", {
+        const result = await invoke<{ exit_code: number | null; completed: boolean; output_directory: string }>("recover_files_photorec", {
           source: endpoint(source), destination: endpoint(target), outputDirectory: recoveryOutputDir,
           requestedBytes: target.capacity_bytes, confirmationPhrase: recoveryPhraseInput
         });
-        setOperationMessage(`PhotoRec finalizado (código ${result.exit_code}). Arquivos em: ${result.output_directory}`);
+        setOperationMessage(`PhotoRec ${result.completed ? "concluído" : "interrompido com resultados parciais"} (código ${result.exit_code}). Arquivos em: ${result.output_directory}`);
       }
       setRecoveryPhrase(""); setRecoveryPhraseInput("");
     } catch (cause) { setOperationMessage(`Recuperação não concluída: ${String(cause)}`); }
