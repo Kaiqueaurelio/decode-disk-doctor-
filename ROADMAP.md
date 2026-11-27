@@ -12,11 +12,11 @@ This roadmap describes intended work, not completed functionality. A feature is 
 - [ ] Add threat model and release checklist
 
 ## Phase 1 — Read-only desktop MVP
-- [ ] Tauri 2 desktop shell (Windows/Linux)
-- [ ] React + TypeScript interface and Decode visual system
-- [ ] Rust device discovery with stable device identity
+- [x] Tauri 2 desktop shell scaffold (Windows/Linux targets configured; runtime validation pending)
+- [x] React + TypeScript dashboard scaffold and Decode visual system
+- [x] Read-only Linux block-device discovery with sysfs identity (Windows provider pending)
 - [ ] Hardware inventory and device detail
-- [ ] SMART/NVMe read-only inspection
+- [x] smartmontools read-only SMART adapter (NVMe field mapping still requires device validation)
 - [ ] Temperature reporting where supported
 - [ ] SQLite history and structured operation logs
 - [ ] Exportable diagnostic report
