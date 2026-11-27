@@ -10,6 +10,7 @@ members = [
   "crates/clone-engine",
   "crates/recovery-engine",
   "crates/report-engine",
+  "apps/desktop/src-tauri",
 ]
 
 [workspace.package]
