@@ -18,3 +18,6 @@ device-discovery = { path = "../../../crates/device-discovery" }
 diagnostic-engine = { path = "../../../crates/diagnostic-engine" }
 smart-engine = { path = "../../../crates/smart-engine" }
 recovery-engine = { path = "../../../crates/recovery-engine" }\n
+clone-engine = { path = "../../../crates/clone-engine" }
+imaging-engine = { path = "../../../crates/imaging-engine" }
+safety-policy = { path = "../../../crates/safety-policy" }
