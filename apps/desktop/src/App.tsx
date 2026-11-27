@@ -67,6 +67,14 @@ export default function App() {
   const [restorePhraseInput, setRestorePhraseInput] = useState("");
   const [operationMessage, setOperationMessage] = useState("");
   const [operationBusy, setOperationBusy] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState<"ddrescue" | "photorec">("ddrescue");
+  const [recoverySource, setRecoverySource] = useState("");
+  const [recoveryTarget, setRecoveryTarget] = useState("");
+  const [recoveryImagePath, setRecoveryImagePath] = useState("");
+  const [recoveryMapPath, setRecoveryMapPath] = useState("");
+  const [recoveryOutputDir, setRecoveryOutputDir] = useState("");
+  const [recoveryPhrase, setRecoveryPhrase] = useState("");
+  const [recoveryPhraseInput, setRecoveryPhraseInput] = useState("");
 
   async function scanDevices() {
     setLoading(true);
@@ -193,6 +201,66 @@ export default function App() {
       setOperationMessage(`Restauração concluída: ${formatBytes(result.bytes_processed)} · SHA-256 ${result.sha256}`);
       setRestorePhrase(""); setRestorePhraseInput("");
     } catch (cause) { setOperationMessage(`Restauração não concluída: ${String(cause)}`); }
+    finally { setOperationBusy(false); }
+  }
+
+
+  async function prepareRecovery() {
+    const source = devices.find((d) => d.device_path === recoverySource);
+    const target = devices.find((d) => d.device_path === recoveryTarget);
+    if (!source || !target || !source.stable_id || !target.stable_id) {
+      setOperationMessage("Selecione origem e destino com identidade física disponível."); return;
+    }
+    if (recoveryMode === "ddrescue" && (!recoveryImagePath.trim() || !recoveryMapPath.trim())) {
+      setOperationMessage("Informe os caminhos completos do arquivo de imagem e do mapfile."); return;
+    }
+    if (recoveryMode === "photorec" && !recoveryOutputDir.trim()) {
+      setOperationMessage("Informe a pasta de destino dos arquivos recuperados."); return;
+    }
+    try {
+      setOperationBusy(true); setOperationMessage("");
+      const consentDestination: StorageEndpoint = recoveryMode === "ddrescue"
+        ? { kind: "ImageFile", path: recoveryImagePath, stable_identity: target.stable_id,
+            capacity_bytes: source.capacity_bytes, is_system: false, is_mounted: false, is_read_only: false }
+        : endpoint(target);
+      const phrase = await invoke<string>("operation_confirmation_phrase", {
+        kind: recoveryMode === "ddrescue" ? "DiskImage" : "FileRecovery",
+        source: endpoint(source), destination: consentDestination,
+        requestedBytes: recoveryMode === "ddrescue" ? source.capacity_bytes : target.capacity_bytes
+      });
+      setRecoveryPhrase(phrase); setRecoveryPhraseInput("");
+      setOperationMessage(recoveryMode === "ddrescue"
+        ? "Plano ddrescue preparado. A primeira passagem preserva o mapfile para retomada."
+        : "Plano PhotoRec preparado. Os arquivos recuperados serão gravados somente na pasta de destino.");
+    } catch (cause) { setOperationMessage(String(cause)); }
+    finally { setOperationBusy(false); }
+  }
+
+  async function executeRecovery() {
+    const source = devices.find((d) => d.device_path === recoverySource);
+    const target = devices.find((d) => d.device_path === recoveryTarget);
+    if (!source || !target || !recoveryPhrase || recoveryPhraseInput !== recoveryPhrase) {
+      setOperationMessage("A confirmação não corresponde ao plano de recuperação."); return;
+    }
+    try {
+      setOperationBusy(true);
+      if (recoveryMode === "ddrescue") {
+        setOperationMessage("ddrescue em execução. A imagem e o mapfile serão preservados para retomada.");
+        const result = await invoke<{ exit_code: number | null; image_path: string; mapfile_path: string }>("run_ddrescue", {
+          source: endpoint(source), destination: endpoint(target), imagePath: recoveryImagePath,
+          mapfilePath: recoveryMapPath, requestedBytes: source.capacity_bytes, confirmationPhrase: recoveryPhraseInput
+        });
+        setOperationMessage(`ddrescue finalizado (código ${result.exit_code}). Imagem: ${result.image_path} · Mapfile: ${result.mapfile_path}`);
+      } else {
+        setOperationMessage("PhotoRec em execução. Não desconecte os dispositivos.");
+        const result = await invoke<{ exit_code: number | null; output_directory: string }>("recover_files_photorec", {
+          source: endpoint(source), destination: endpoint(target), outputDirectory: recoveryOutputDir,
+          requestedBytes: target.capacity_bytes, confirmationPhrase: recoveryPhraseInput
+        });
+        setOperationMessage(`PhotoRec finalizado (código ${result.exit_code}). Arquivos em: ${result.output_directory}`);
+      }
+      setRecoveryPhrase(""); setRecoveryPhraseInput("");
+    } catch (cause) { setOperationMessage(`Recuperação não concluída: ${String(cause)}`); }
     finally { setOperationBusy(false); }
   }
 
@@ -340,6 +408,45 @@ export default function App() {
             </div>
           </div>
           {operationMessage && <div className="notice" style={{ marginTop: 18 }}><strong>Resultado da operação</strong><span>{operationMessage}</span></div>}
+        </section>
+
+        <section className="safety-note" style={{ marginTop: 20, display: "block" }}>
+          <span className="eyebrow blue">RECUPERAÇÃO DE DADOS</span>
+          <h3 style={{ margin: "8px 0" }}>ddrescue e PhotoRec</h3>
+          <p>Use ddrescue primeiro em mídias instáveis: ele cria uma imagem e um mapfile retomável. PhotoRec procura arquivos e grava os resultados em outro disco.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 16, marginTop: 14 }}>
+            <div>
+              <label>Motor de recuperação</label>
+              <select value={recoveryMode} onChange={(e) => { setRecoveryMode(e.target.value as "ddrescue" | "photorec"); setRecoveryPhrase(""); }} style={{ width: "100%", padding: 10 }}>
+                <option value="ddrescue">ddrescue · imagem de disco</option>
+                <option value="photorec">PhotoRec · recuperar arquivos</option>
+              </select>
+              <label style={{ display: "block", marginTop: 10 }}>Disco de origem</label>
+              <select value={recoverySource} onChange={(e) => setRecoverySource(e.target.value)} style={{ width: "100%", padding: 10 }}>
+                <option value="">Selecione a origem</option>{devices.map((d) => <option key={d.device_path} value={d.device_path}>{d.device_path} · {d.model}</option>)}
+              </select>
+              <label style={{ display: "block", marginTop: 10 }}>Disco de destino</label>
+              <select value={recoveryTarget} onChange={(e) => setRecoveryTarget(e.target.value)} style={{ width: "100%", padding: 10 }}>
+                <option value="">Selecione outro disco</option>{devices.map((d) => <option key={d.device_path} value={d.device_path}>{d.device_path} · {d.model}</option>)}
+              </select>
+            </div>
+            {recoveryMode === "ddrescue" ? <div>
+              <label>Arquivo de imagem</label>
+              <input value={recoveryImagePath} onChange={(e) => setRecoveryImagePath(e.target.value)} placeholder="/mnt/backup/falha.img" style={{ width: "100%", padding: 10 }} />
+              <label style={{ display: "block", marginTop: 10 }}>Mapfile (retomada)</label>
+              <input value={recoveryMapPath} onChange={(e) => setRecoveryMapPath(e.target.value)} placeholder="/mnt/backup/falha.map" style={{ width: "100%", padding: 10 }} />
+            </div> : <div>
+              <label>Pasta de saída (já montada)</label>
+              <input value={recoveryOutputDir} onChange={(e) => setRecoveryOutputDir(e.target.value)} placeholder="/mnt/backup/recuperados" style={{ width: "100%", padding: 10 }} />
+              <small>Selecione o disco que contém essa pasta. O motor valida a correspondência física antes de iniciar.</small>
+            </div>}
+          </div>
+          <button className="secondary" disabled={operationBusy} onClick={prepareRecovery} style={{ marginTop: 12 }}>Preparar recuperação</button>
+          {recoveryPhrase && <>
+            <p><small>Digite exatamente: <b>{recoveryPhrase}</b></small></p>
+            <input value={recoveryPhraseInput} onChange={(e) => setRecoveryPhraseInput(e.target.value)} placeholder="Frase de confirmação" style={{ width: "100%", padding: 10 }} />
+            <button className="primary" disabled={operationBusy || recoveryPhraseInput !== recoveryPhrase} onClick={executeRecovery} style={{ marginTop: 10 }}>Iniciar recuperação</button>
+          </>}
         </section>
 
         <section className="safety-note"><span className="shield">◇</span><div><strong>Proteção de dados em primeiro lugar</strong><p>Descoberta de hardware e leitura SMART são somente leitura. Clonagem, imagem raw e restauração agora têm motores Linux com confirmação vinculada ao plano. Use apenas mídia de teste até validar o fluxo com hardware real.</p></div></section>
