@@ -54,7 +54,13 @@ impl SmartProvider for SmartctlProvider {
             .arg("--xall")
             .arg(path)
             .output()
-            .map_err(|error| SmartError::ProcessStart(error.to_string()))?;
+            .map_err(|error| {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    SmartError::NotConfigured
+                } else {
+                    SmartError::ProcessStart(error.to_string())
+                }
+            })?;
 
         let parsed: Value = serde_json::from_slice(&output.stdout)
             .map_err(|error| SmartError::InvalidOutput(format!("{error}; stderr: {}", String::from_utf8_lossy(&output.stderr))))?;
