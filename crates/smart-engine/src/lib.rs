@@ -42,7 +42,7 @@ impl SmartctlProvider {
 impl SmartProvider for SmartctlProvider {
     fn inspect_read_only(&self, device: &DeviceIdentity) -> Result<DiagnosticSnapshot, SmartError> {
         let path = device.device_path.trim();
-        let valid = path.starts_with("/dev/") || path.starts_with(r"\\.\PhysicalDrive");
+        let valid = path.starts_with("/dev/") || path.to_ascii_lowercase().starts_with(r"\\.\physicaldrive");
         if !valid {
             return Err(SmartError::InvalidDevicePath(path.to_string()));
         }
