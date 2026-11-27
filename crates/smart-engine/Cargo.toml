@@ -8,3 +8,4 @@ license.workspace = true
 decode-core = { path = "../decode-core" }
 diagnostic-engine = { path = "../diagnostic-engine" }
 thiserror.workspace = true
+serde_json.workspace = true
