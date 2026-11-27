@@ -47,11 +47,11 @@ impl SmartProvider for SmartctlProvider {
             return Err(SmartError::InvalidDevicePath(path.to_string()));
         }
 
-        // smartctl -j -a only reads device health/log data. Never add write, test,
+        // smartctl --json --xall reads extended device health and information data. Never add write, test,
         // sanitize, erase or firmware-update flags in this provider.
         let output = Command::new(&self.executable)
             .arg("--json")
-            .arg("--all")
+            .arg("--xall")
             .arg(path)
             .output()
             .map_err(|error| SmartError::ProcessStart(error.to_string()))?;
