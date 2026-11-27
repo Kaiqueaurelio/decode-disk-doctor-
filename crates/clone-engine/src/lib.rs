@@ -25,7 +25,7 @@ let sm=fs::metadata(sp)?;let dm=fs::metadata(dp)?;
 if !sm.file_type().is_block_device()||!dm.file_type().is_block_device(){return Err(CloneError::NotBlockDevices)}
 let sd=dev(sm.rdev());let dd=dev(dm.rdev());if sd==dd{return Err(CloneError::SameDevice)}
 verify_identity(sm.rdev(),p.source.stable_identity.as_deref().unwrap_or(""))?;verify_identity(dm.rdev(),p.destination.stable_identity.as_deref().unwrap_or(""))?;
-safe_mount(sd)?;safe_mount(dd)?;
+safe_mount(sm.rdev())?;safe_mount(dm.rdev())?;
 let mut src=fs::File::open(sp)?;let src_capacity=block_capacity(&src)?;if p.requested_bytes>src_capacity{return Err(CloneError::CapacityMismatch)}
 let mut dst=OpenOptions::new().read(true).write(true).open(dp)?;let dst_capacity=block_capacity(&dst)?;if p.requested_bytes>dst_capacity{return Err(CloneError::CapacityMismatch)}
 let copied=copy_exact(&mut src,&mut dst,p.requested_bytes)?;dst.sync_all()?;
